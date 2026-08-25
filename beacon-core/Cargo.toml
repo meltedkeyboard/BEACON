@@ -1,0 +1,22 @@
+[package]
+name = "beacon-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+sha1.workspace = true
+uuid.workspace = true
+futures-util.workspace = true
+directories.workspace = true
+tracing.workspace = true
+zip = "2"
+# windows-native selects the Windows Credential Manager backend. Add apple-native /
+# sync-secret-service here once launcher-gui needs to run on macOS/Linux too.
+keyring = { version = "3", features = ["windows-native"] }

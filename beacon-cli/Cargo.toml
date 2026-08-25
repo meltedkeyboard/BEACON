@@ -1,0 +1,14 @@
+[package]
+name = "beacon-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+beacon-core = { path = "../beacon-core" }
+tokio.workspace = true
+reqwest.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

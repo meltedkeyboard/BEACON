@@ -1,0 +1,16 @@
+# build output
+/target
+
+# confidential / working notes, not for the public repo
+todo.md
+
+# local config fallback (used only if the OS config dir can't be resolved)
+beacon-config.json
+
+# IDE / editor
+.idea/
+.vscode/
+
+# OS junk
+Thumbs.db
+Desktop.ini
