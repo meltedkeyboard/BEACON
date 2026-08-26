@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "beacon-core",
     "beacon-cli",
+    "beacon-tauri/src-tauri",
 ]
 
 [workspace.package]

@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
     let config_path = cli.config.unwrap_or_else(default_config_path);
-    let http = reqwest::Client::new();
+    let http = beacon_core::http_client();
 
     match cli.command {
         Command::ListVersions { snapshots } => {
@@ -101,8 +101,15 @@ async fn main() -> anyhow::Result<()> {
                     .find_account(&account_id)
                     .cloned()
                     .ok_or_else(|| anyhow::anyhow!("no saved account '{account_id}'"))?;
-                let session = refresh_session(&http, &config.azure_client_id, &account).await?;
-                (account, Some(session))
+                // `--account` can now point at a saved offline account too (the GUI lets you
+                // save one) -- only Microsoft accounts have a session to refresh.
+                let session = match &account {
+                    beacon_core::Account::Microsoft { .. } => {
+                        Some(refresh_session(&http, &config.azure_client_id, &account).await?)
+                    }
+                    beacon_core::Account::Offline { .. } => None,
+                };
+                (account, session)
             };
 
             let options = LaunchOptions {
@@ -112,6 +119,12 @@ async fn main() -> anyhow::Result<()> {
             };
 
             let mut child = launch(&config, &version_data, &account, ms_session.as_ref(), options).await?;
+            if let Some(stdout) = child.stdout.take() {
+                forward_lines(stdout, false);
+            }
+            if let Some(stderr) = child.stderr.take() {
+                forward_lines(stderr, true);
+            }
             let status = child.wait().await?;
             std::process::exit(status.code().unwrap_or(0));
         }
@@ -155,6 +168,22 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// `launch()` now pipes the child's output instead of inheriting the console (a GUI frontend has
+/// none to inherit into), so the CLI has to forward it itself to keep the old behavior.
+fn forward_lines(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static, to_stderr: bool) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(reader).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if to_stderr {
+                eprintln!("{line}");
+            } else {
+                println!("{line}");
+            }
+        }
+    });
 }
 
 fn progress_callback() -> Arc<dyn Fn(DownloadProgress) + Send + Sync> {

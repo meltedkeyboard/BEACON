@@ -46,6 +46,41 @@ pub enum CoreError {
 
 pub type Result<T> = std::result::Result<T, CoreError>;
 
+/// Tauri commands require their `Err` type to implement `Serialize` to cross the IPC boundary,
+/// so `CoreError` needs one even though `thiserror` only gives us `Display`/`Error`. Serializes
+/// as `{ "kind": ..., "message": ... }` -- `kind` is a stable string a frontend can match on,
+/// `message` is the human-readable text already produced by `Display`.
+impl serde::Serialize for CoreError {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("CoreError", 2)?;
+        state.serialize_field("kind", self.kind())?;
+        state.serialize_field("message", &self.to_string())?;
+        state.end()
+    }
+}
+
+impl CoreError {
+    fn kind(&self) -> &'static str {
+        match self {
+            CoreError::Http(_) => "http",
+            CoreError::Io { .. } => "io",
+            CoreError::Json(_) => "json",
+            CoreError::VersionNotFound(_) => "version_not_found",
+            CoreError::AccountNotFound(_) => "account_not_found",
+            CoreError::ChecksumMismatch { .. } => "checksum_mismatch",
+            CoreError::Zip(_) => "archive",
+            CoreError::Launch(_) => "launch",
+            CoreError::Auth(_) => "auth",
+            CoreError::SecretStore(_) => "secret_store",
+            CoreError::Other(_) => "other",
+        }
+    }
+}
+
 pub(crate) fn io_err(path: impl Into<PathBuf>) -> impl FnOnce(std::io::Error) -> CoreError {
     let path = path.into();
     move |source| CoreError::Io { path, source }

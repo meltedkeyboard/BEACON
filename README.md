@@ -28,6 +28,7 @@ Early stage / work in progress. Currently implemented:
 - Concurrent, SHA1-verified downloads of the client jar, libraries, natives, and assets
 - Offline accounts (gated behind at least one verified Microsoft sign-in, see below)
 - Microsoft account sign-in (OAuth2 device code flow, Xbox Live / XSTS / Minecraft Services) with the refresh token stored in the OS credential store, never in plaintext
+- A `beacon-tauri` desktop GUI (early, actively changing) alongside the `beacon-cli` command-line interface
 
 Offline accounts exist as a convenience for players who have already proven ownership of the
 game through a Microsoft sign-in, they are not available until at least one Microsoft
@@ -36,9 +37,12 @@ account has been signed in successfully.
 ## Workspace layout
 
 - `beacon-core` is the launcher logic as a library: manifest parsing, downloading, account
-  and auth handling, JVM launch. No UI code; every public type is serde-serializable so it
-  can eventually be reused from a GUI frontend.
+  and auth handling, JVM launch. No UI code; every public type is serde-serializable, which is
+  what lets both `beacon-cli` and `beacon-tauri` sit on top of it directly.
 - `beacon-cli` is a thin CLI over `beacon-core`.
+- `beacon-tauri` is the desktop GUI (`src-tauri` crate: `beacon-desktop`), a Tauri app wired to
+  `beacon-core` -- version picker, accounts, sign-in, install/launch with progress, all still
+  early and under active development.
 
 ## Building
 

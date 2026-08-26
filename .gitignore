@@ -1,5 +1,7 @@
 # build output
 /target
+beacon-tauri/node_modules/
+beacon-tauri/dist/
 
 # confidential / working notes, not for the public repo
 todo.md

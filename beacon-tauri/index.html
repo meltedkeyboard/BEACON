@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Beacon</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <div class="app">
+      <header class="titlebar" data-tauri-drag-region>
+        <span class="titlebar__title" data-tauri-drag-region>Beacon</span>
+        <div class="titlebar__controls">
+          <button class="titlebar__btn" type="button" data-window-action="minimize" aria-label="Minimize">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.2" />
+            </svg>
+          </button>
+          <button class="titlebar__btn" type="button" data-window-action="maximize" aria-label="Maximize">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <rect x="2.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.2" />
+            </svg>
+          </button>
+          <button class="titlebar__btn titlebar__btn--close" type="button" data-window-action="close" aria-label="Close">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.2" />
+              <line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.2" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="shell" id="shell">
+      <aside class="sidebar">
+        <div class="account-menu" id="account-menu">
+          <button class="account" type="button" id="account-button">
+            <span class="account__avatar" aria-hidden="true"></span>
+            <span class="account__info">
+              <span class="account__name" id="account-name">Sign in</span>
+              <span class="account__status" id="account-status">Offline mode</span>
+            </span>
+            <span class="account__chevron" aria-hidden="true">&#9662;</span>
+          </button>
+
+          <div class="account-menu__panel">
+            <div class="account-menu__accounts" id="account-menu-accounts"></div>
+            <div class="account-menu__actions">
+              <button class="account-menu__item" type="button" id="account-menu-signin">Sign in with Microsoft</button>
+              <button class="account-menu__item" type="button" id="account-menu-add-offline">Add offline account</button>
+              <button class="account-menu__item" type="button" id="account-menu-manage">Manage accounts</button>
+            </div>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Primary">
+          <button class="nav-row" type="button" data-nav="news">
+            <span class="nav-row__icon" aria-hidden="true">&#9776;</span>
+            <span class="nav-row__label">News</span>
+          </button>
+
+          <button class="nav-row nav-row--game is-selected" type="button" data-nav="game">
+            <span class="nav-row__icon nav-row__icon--game" aria-hidden="true"></span>
+            <span class="nav-row__title">Java Edition</span>
+          </button>
+        </nav>
+
+        <div class="sidebar__footer">
+          <button class="nav-row" type="button" id="accounts-nav" data-nav="accounts">
+            <span class="nav-row__icon" aria-hidden="true">&#128100;</span>
+            <span class="nav-row__label">Accounts</span>
+          </button>
+          <button class="nav-row" type="button" data-nav="settings">
+            <span class="nav-row__icon" aria-hidden="true">&#9881;</span>
+            <span class="nav-row__label">Settings</span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="panel">
+        <header class="panel__header">
+          <nav class="tabs" aria-label="Sections">
+            <button class="tab is-active" type="button" data-tab="play">Play</button>
+            <button class="tab" type="button" data-tab="installations">Installations</button>
+            <button class="tab" type="button" data-tab="skins">Skins</button>
+            <button class="tab" type="button" data-tab="notes">Patch notes</button>
+          </nav>
+        </header>
+
+        <div class="panel__body">
+          <section class="tab-panel is-active" data-tab-panel="play">
+            <div class="hero">
+              <span class="hero__mark" aria-hidden="true">
+                <span class="hero__mark-beam"></span>
+                <span class="hero__mark-base"></span>
+              </span>
+              <p class="hero__wordmark">Beacon</p>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-tab-panel="installations">
+            <p class="placeholder-text">Installed versions will list here.</p>
+          </section>
+
+          <section class="tab-panel" data-tab-panel="skins">
+            <p class="placeholder-text">Skin management will live here.</p>
+          </section>
+
+          <section class="tab-panel" data-tab-panel="notes">
+            <p class="placeholder-text">Patch notes will render here.</p>
+          </section>
+        </div>
+
+        <p class="launch-error" id="launch-error" hidden></p>
+
+        <footer class="playbar">
+          <div class="version-picker" id="version-picker">
+            <button class="version-picker__trigger" type="button" id="version-picker-trigger">
+              <span class="playbar__version-icon" aria-hidden="true"></span>
+              <span class="version-picker__id" id="playbar-version">&mdash;</span>
+              <span class="version-picker__chevron" aria-hidden="true">&#9652;</span>
+            </button>
+            <div class="version-picker__list" id="version-picker-list"></div>
+          </div>
+
+          <button class="play" type="button" id="play-button">
+            <span class="play__fill" id="play-fill"></span>
+            <span class="play__label" id="play-label">Play</span>
+          </button>
+
+          <span class="playbar__user" id="playbar-user">Not signed in</span>
+        </footer>
+      </main>
+      </div>
+
+      <div class="accounts-screen" id="accounts-screen">
+        <header class="accounts-screen__header">
+          <button class="accounts-screen__back" type="button" id="accounts-back">&#8592; Back</button>
+          <p class="accounts-screen__title">Accounts</p>
+        </header>
+        <div class="accounts-screen__body">
+          <p class="modal__body">The account on top is used for Play. Move an account up to make it current.</p>
+          <div class="manage-list" id="manage-list"></div>
+          <div class="accounts-screen__actions">
+            <button class="modal__btn" type="button" id="manage-add-offline">Add offline</button>
+            <button class="modal__btn modal__btn--primary" type="button" id="manage-add-microsoft">Add Microsoft</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="login-modal">
+        <div class="modal__panel">
+          <p class="modal__eyebrow">Sign in with Microsoft</p>
+          <p class="modal__body">Open the page below and enter this code to finish signing in.</p>
+          <p class="modal__code" id="login-code">········</p>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="login-open-browser">Open browser</button>
+            <button class="modal__btn" type="button" id="login-close">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="error-modal">
+        <div class="modal__panel">
+          <p class="modal__eyebrow">Unexpected error</p>
+          <p class="modal__body" id="error-message"></p>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="error-close">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="offline-modal">
+        <div class="modal__panel">
+          <p class="modal__eyebrow" id="offline-modal-eyebrow">Add offline account</p>
+          <p class="modal__body">Pick a nickname. It doesn't need to match your Microsoft account.</p>
+          <input class="modal__input" type="text" id="offline-nickname-input" placeholder="Nickname" maxlength="16" autocomplete="off" />
+          <p class="modal__error" id="offline-nickname-error" hidden></p>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="offline-confirm">Add</button>
+            <button class="modal__btn" type="button" id="offline-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

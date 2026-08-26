@@ -117,6 +117,7 @@ fn expand_argument_entries(entries: &[ArgumentEntry]) -> Vec<String> {
     out
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LaunchOptions {
     pub game_dir: PathBuf,
     pub java_path: String,
@@ -129,6 +130,10 @@ pub struct LaunchOptions {
 /// `ms_session` must be `Some` when `account` is [`Account::Microsoft`] -- obtain one via
 /// [`crate::login::login_with_device_code`] or [`crate::login::refresh_session`] right before
 /// calling this, since the token it carries is short-lived and not persisted.
+///
+/// The returned child's stdout/stderr are piped, not inherited -- a GUI frontend has no console
+/// to inherit into, so callers (CLI included) are expected to read and forward those streams
+/// themselves.
 pub async fn launch(
     config: &LauncherConfig,
     version_data: &VersionData,
@@ -199,8 +204,8 @@ pub async fn launch(
         .arg(&version_data.main_class)
         .args(game_template.iter().map(|arg| substitute(arg, &vars)))
         .current_dir(&options.game_dir)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     tokio::fs::create_dir_all(&options.game_dir)
         .await
