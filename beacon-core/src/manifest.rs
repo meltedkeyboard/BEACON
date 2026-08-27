@@ -205,6 +205,71 @@ pub struct AssetObject {
     pub size: u64,
 }
 
+/// What every mod loader's own JSON provides -- Fabric/Quilt's `.../profile/json` response, or
+/// the `version.json` extracted from a Forge/NeoForge installer jar after its processors have
+/// run. In every case it's a *partial* version JSON meant to sit on top of the vanilla version
+/// named in `inherits_from`: no `downloads`/`assetIndex`/`javaVersion` of its own.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoaderProfile {
+    pub id: String,
+    #[serde(rename = "inheritsFrom")]
+    pub inherits_from: String,
+    #[serde(rename = "mainClass")]
+    pub main_class: String,
+    #[serde(default)]
+    pub arguments: Option<Arguments>,
+    #[serde(rename = "minecraftArguments", default)]
+    pub minecraft_arguments: Option<String>,
+    #[serde(default)]
+    pub libraries: Vec<Library>,
+}
+
+/// Merges a loader's partial overlay onto the vanilla `VersionData` it targets, producing a
+/// normal, fully-populated `VersionData` -- identical in shape to a plain vanilla one, so nothing
+/// downstream (`install_version`, `launch`) needs to know a merge happened. Used identically by
+/// all four loaders (Fabric/Quilt profile JSON, Forge/NeoForge's post-processor `version.json`).
+///
+/// - `id`/`main_class`/`libraries` come from the overlay (libraries are vanilla's ++ overlay's,
+///   in that order -- matches the classpath ordering the official installers themselves produce).
+/// - `assets`/`asset_index`/`downloads`/`java_version` come from vanilla only -- the overlay
+///   never carries these.
+/// - `arguments` concatenate vanilla's game/jvm lists with the overlay's own (appended), falling
+///   back to synthesizing a minimal `Arguments` from vanilla's legacy `minecraft_arguments` on
+///   versions old enough to still use that flat-string form.
+pub fn merge_with_vanilla(vanilla: &VersionData, overlay: LoaderProfile) -> VersionData {
+    let mut libraries = vanilla.libraries.clone();
+    libraries.extend(overlay.libraries);
+
+    let base_arguments = vanilla.arguments.clone().unwrap_or_else(|| Arguments {
+        game: vanilla
+            .minecraft_arguments
+            .as_deref()
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(|s| ArgumentEntry::Plain(s.to_string()))
+            .collect(),
+        jvm: Vec::new(),
+    });
+    let overlay_arguments = overlay.arguments.unwrap_or(Arguments { game: Vec::new(), jvm: Vec::new() });
+    let arguments = Arguments {
+        game: base_arguments.game.into_iter().chain(overlay_arguments.game).collect(),
+        jvm: base_arguments.jvm.into_iter().chain(overlay_arguments.jvm).collect(),
+    };
+
+    VersionData {
+        id: overlay.id,
+        version_type: vanilla.version_type.clone(),
+        main_class: overlay.main_class,
+        assets: vanilla.assets.clone(),
+        asset_index: vanilla.asset_index.clone(),
+        downloads: vanilla.downloads.clone(),
+        libraries,
+        java_version: vanilla.java_version.clone(),
+        arguments: Some(arguments),
+        minecraft_arguments: None,
+    }
+}
+
 pub async fn fetch_asset_index(
     client: &reqwest::Client,
     asset_index_ref: &AssetIndexRef,

@@ -6,7 +6,7 @@ use beacon_core::instance::{
     delete_screenshot, delete_shader_pack, delete_world, export_instance, import_instance, list_mods,
     list_resource_packs, list_screenshots, list_shader_packs, list_worlds, rename_instance, toggle_mod,
 };
-use beacon_core::{CoreError, Instance, ModInfo, ScreenshotInfo, WorldInfo};
+use beacon_core::{CoreError, Instance, ModInfo, ResourcePackInfo, ScreenshotInfo, WorldInfo};
 use tauri::{AppHandle, Manager, State};
 
 use crate::state::{join_err, AppState};
@@ -34,7 +34,7 @@ pub struct InstanceView {
     screenshots_dir: PathBuf,
 }
 
-fn instance_view(config: &LauncherConfig, instance: Instance) -> InstanceView {
+pub(crate) fn instance_view(config: &LauncherConfig, instance: Instance) -> InstanceView {
     let dir = instance.dir(config);
     let mods_dir = instance.mods_dir(config);
     let saves_dir = instance.saves_dir(config);
@@ -147,6 +147,10 @@ pub async fn set_instance_version_cmd(
         .position(|i| i.id == instance_id)
         .ok_or_else(|| CoreError::Other(format!("no instance '{instance_id}'")))?;
     config.instances[position].version_id = version_id;
+    // A loader build targets one specific Minecraft version -- changing it invalidates whatever
+    // was installed, same as every other launcher's behavior here. The user just reinstalls it
+    // for the new version from the instance screen.
+    config.instances[position].mod_loader = None;
     let instance = config.instances[position].clone();
     config.save(&state.config_path).await?;
     Ok(instance_view(&config, instance))
@@ -200,7 +204,7 @@ pub async fn list_worlds_cmd(state: State<'_, AppState>, instance_id: String) ->
 }
 
 #[tauri::command]
-pub async fn list_resource_packs_cmd(state: State<'_, AppState>, instance_id: String) -> Result<Vec<String>, CoreError> {
+pub async fn list_resource_packs_cmd(state: State<'_, AppState>, instance_id: String) -> Result<Vec<ResourcePackInfo>, CoreError> {
     let config = state.config.lock().await;
     let instance = require_instance(&config, &instance_id)?;
     list_resource_packs(&config, instance)

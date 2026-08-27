@@ -5,6 +5,36 @@ use uuid::Uuid;
 
 use crate::error::{CoreError, Result};
 
+const MAX_AUTH_ATTEMPTS: u32 = 3;
+
+/// Retries a transient send failure (a dropped connection, a DNS/TLS hiccup, a timeout -- routine
+/// noise on any of these five hops, same reasoning as `downloader.rs`'s `fetch_with_retries`) up
+/// to `MAX_AUTH_ATTEMPTS` times with a short backoff, instead of failing sign-in/session-refresh
+/// outright on the first blip. A non-2xx *response* isn't retried here -- that's a real answer
+/// from the server, not a network failure, and each caller's own `json_or_error`/status check
+/// handles it. `try_clone()` only fails for a streaming body, which none of these requests use
+/// (all are `.form(...)`/`.json(...)`, buffered up front) -- the `None` branch exists only as a
+/// safety net, not a path any real call here should hit.
+async fn send_with_retries(builder: reqwest::RequestBuilder) -> Result<reqwest::Response> {
+    let mut last_err = None;
+    for attempt in 1..=MAX_AUTH_ATTEMPTS {
+        let Some(attempt_builder) = builder.try_clone() else {
+            return Ok(builder.send().await?);
+        };
+        match attempt_builder.send().await {
+            Ok(response) => return Ok(response),
+            Err(e) => {
+                eprintln!("[beacon] auth request failed (attempt {attempt}/{MAX_AUTH_ATTEMPTS}): {e}");
+                last_err = Some(e);
+                if attempt < MAX_AUTH_ATTEMPTS {
+                    tokio::time::sleep(Duration::from_millis(400 * attempt as u64)).await;
+                }
+            }
+        }
+    }
+    Err(last_err.expect("loop always sets last_err before exiting on failure").into())
+}
+
 /// Azure App Registration client id (public client, "Allow public client flows" enabled,
 /// `XboxLive.signin` delegated permission granted). Override via
 /// [`crate::config::LauncherConfig::azure_client_id`] to use a different registration without
@@ -46,10 +76,7 @@ pub async fn request_device_code(
     client: &reqwest::Client,
     client_id: &str,
 ) -> Result<DeviceAuthorization> {
-    let response: DeviceCodeResponse = client
-        .post(DEVICE_CODE_URL)
-        .form(&[("client_id", client_id), ("scope", OAUTH_SCOPE)])
-        .send()
+    let response: DeviceCodeResponse = send_with_retries(client.post(DEVICE_CODE_URL).form(&[("client_id", client_id), ("scope", OAUTH_SCOPE)]))
         .await?
         .error_for_status()?
         .json()
@@ -100,7 +127,11 @@ pub async fn poll_device_code(
         }
         tokio::time::sleep(interval).await;
 
-        let response = client
+        // A network blip here shouldn't abort a multi-minute device-code wait the user already
+        // scanned a code for -- treat it as just another "not done yet" and try again next
+        // interval, the same as `authorization_pending` below, rather than failing the whole
+        // sign-in over one dropped connection.
+        let response = match client
             .post(TOKEN_URL)
             .form(&[
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
@@ -108,7 +139,14 @@ pub async fn poll_device_code(
                 ("device_code", &authorization.device_code),
             ])
             .send()
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                eprintln!("[beacon] device code poll request failed, will retry next interval: {e}");
+                continue;
+            }
+        };
 
         if response.status().is_success() {
             let tokens: TokenResponse = response.json().await?;
@@ -140,19 +178,16 @@ pub async fn refresh_tokens(
     client_id: &str,
     refresh_token: &str,
 ) -> Result<MicrosoftTokens> {
-    let tokens: TokenResponse = client
-        .post(TOKEN_URL)
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("client_id", client_id),
-            ("refresh_token", refresh_token),
-            ("scope", OAUTH_SCOPE),
-        ])
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    let tokens: TokenResponse = send_with_retries(client.post(TOKEN_URL).form(&[
+        ("grant_type", "refresh_token"),
+        ("client_id", client_id),
+        ("refresh_token", refresh_token),
+        ("scope", OAUTH_SCOPE),
+    ]))
+    .await?
+    .error_for_status()?
+    .json()
+    .await?;
 
     Ok(MicrosoftTokens {
         access_token: tokens.access_token,
@@ -274,7 +309,7 @@ async fn authenticate_xbox_live(client: &reqwest::Client, ms_access_token: &str)
         relying_party: "http://auth.xboxlive.com",
         token_type: "JWT",
     };
-    let response = client.post(XBOX_LIVE_AUTH_URL).json(&body).send().await?;
+    let response = send_with_retries(client.post(XBOX_LIVE_AUTH_URL).json(&body)).await?;
     let response: XboxAuthResponse = json_or_error(response, "Xbox Live sign-in").await?;
     Ok(response.token)
 }
@@ -294,7 +329,7 @@ async fn authenticate_xsts(client: &reqwest::Client, xbl_token: &str) -> Result<
         relying_party: "rp://api.minecraftservices.com/",
         token_type: "JWT",
     };
-    let response = client.post(XSTS_AUTH_URL).json(&body).send().await?;
+    let response = send_with_retries(client.post(XSTS_AUTH_URL).json(&body)).await?;
 
     if response.status().as_u16() == 401 {
         let error: XstsErrorResponse = response.json().await?;
@@ -362,28 +397,16 @@ pub async fn authenticate_minecraft(
     let xsts = authenticate_xsts(client, &xbl_token).await?;
 
     let identity_token = format!("XBL3.0 x={};{}", xsts.uhs, xsts.token);
-    let response = client
-        .post(MC_LOGIN_URL)
-        .json(&McLoginRequest { identity_token })
-        .send()
-        .await?;
+    let response = send_with_retries(client.post(MC_LOGIN_URL).json(&McLoginRequest { identity_token })).await?;
     let login: McLoginResponse = json_or_error(response, "Minecraft sign-in").await?;
 
-    let response = client
-        .get(MC_ENTITLEMENT_URL)
-        .bearer_auth(&login.access_token)
-        .send()
-        .await?;
+    let response = send_with_retries(client.get(MC_ENTITLEMENT_URL).bearer_auth(&login.access_token)).await?;
     let entitlement: McEntitlementResponse = json_or_error(response, "entitlement check").await?;
     if entitlement.items.is_empty() {
         return Err(CoreError::Auth("this Microsoft account does not own Minecraft".into()));
     }
 
-    let profile_response = client
-        .get(MC_PROFILE_URL)
-        .bearer_auth(&login.access_token)
-        .send()
-        .await?;
+    let profile_response = send_with_retries(client.get(MC_PROFILE_URL).bearer_auth(&login.access_token)).await?;
     if profile_response.status().as_u16() == 404 {
         return Err(CoreError::Auth(
             "this Microsoft account has no Minecraft profile (name) set up yet".into(),

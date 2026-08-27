@@ -138,7 +138,10 @@
                 </div>
 
                 <section class="skins-capes">
-                  <p class="content-section__title">Capes</p>
+                  <div class="content-section__header">
+                    <p class="content-section__title">Capes</p>
+                    <button class="modal__btn" type="button" id="skins-refresh-btn">Refresh</button>
+                  </div>
                   <div class="cape-grid" id="cape-grid"></div>
                 </section>
               </div>
@@ -284,6 +287,23 @@
             </div>
           </div>
 
+          <div class="settings-row settings-row--wrap">
+            <div class="settings-row__info">
+              <span class="settings-row__label">CurseForge API key</span>
+              <span class="settings-row__hint">
+                Optional -- paste your own personal CurseForge API key to enable browsing CurseForge
+                mods (Beacon can't ship a shared key; CurseForge's own terms forbid embedding one in
+                a distributed app). <span id="curseforge-key-status">Not set.</span>
+              </span>
+            </div>
+            <div class="settings-row__path-actions">
+              <input class="modal__input" type="password" id="curseforge-key-input" placeholder="Paste API key" autocomplete="off" />
+              <button class="modal__btn modal__btn--primary" type="button" id="curseforge-key-save">Save</button>
+              <button class="modal__btn" type="button" id="curseforge-key-clear">Clear</button>
+              <button class="modal__btn" type="button" id="curseforge-key-request">Get a key&hellip;</button>
+            </div>
+          </div>
+
           <div class="settings-row settings-row--path">
             <div class="settings-row__info">
               <span class="settings-row__label">Launcher config</span>
@@ -317,89 +337,122 @@
               <span class="instance-detail__name" id="instance-detail-name">&mdash;</span>
               <span class="instance-detail__version" id="instance-detail-version">&mdash;</span>
             </div>
+            <div class="instance-detail__top-actions">
+              <button class="modal__btn" type="button" id="instance-rename-btn">Rename</button>
+              <button class="modal__btn modal__btn--danger" type="button" id="instance-delete-btn">Delete</button>
+              <div class="overflow-menu" id="instance-overflow-menu">
+                <button class="overflow-menu__trigger" type="button" id="instance-overflow-btn" aria-label="More actions">&#8942;</button>
+                <div class="overflow-menu__panel">
+                  <button class="overflow-menu__item" type="button" id="instance-icon-clear-btn">Clear icon</button>
+                  <button class="overflow-menu__item" type="button" id="instance-open-folder-btn">Open .minecraft</button>
+                  <button class="overflow-menu__item" type="button" id="instance-libraries-open-btn">Open libraries</button>
+                  <button class="overflow-menu__item" type="button" id="instance-export-btn">Export</button>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="instance-detail__actions">
-            <button class="modal__btn" type="button" id="instance-rename-btn">Rename</button>
-            <button class="modal__btn" type="button" id="instance-icon-clear-btn">Clear icon</button>
-            <button class="modal__btn" type="button" id="instance-open-folder-btn">Open .minecraft</button>
-            <button class="modal__btn" type="button" id="instance-libraries-open-btn">Open libraries</button>
-            <button class="modal__btn" type="button" id="instance-export-btn">Export</button>
-            <button class="modal__btn modal__btn--danger" type="button" id="instance-delete-btn">Delete</button>
+          <nav class="tabs instance-tabs" id="instance-tabs">
+            <button class="tab" type="button" data-instance-tab="overview">Overview</button>
+            <button class="tab" type="button" data-instance-tab="mods">Mods</button>
+            <button class="tab" type="button" data-instance-tab="worlds">Worlds</button>
+            <button class="tab" type="button" data-instance-tab="resource-packs">Resource Packs</button>
+            <button class="tab" type="button" data-instance-tab="shader-packs">Shader Packs</button>
+            <button class="tab" type="button" data-instance-tab="screenshots">Screenshots</button>
+            <button class="tab" type="button" data-instance-tab="advanced">Advanced</button>
+          </nav>
+
+          <div class="instance-tab-panel" data-instance-tab-panel="overview">
+            <section>
+              <p class="content-section__title">Version</p>
+              <div class="manage-list">
+                <div class="manage-row">
+                  <div class="manage-row__info">
+                    <span class="manage-row__name" id="instance-version-name">Minecraft &mdash;</span>
+                  </div>
+                  <button class="manage-row__btn" type="button" id="instance-version-btn">Change version</button>
+                </div>
+                <div class="manage-row">
+                  <div class="manage-row__info">
+                    <span class="manage-row__name" id="instance-loader-name">Mod Loader &mdash; None</span>
+                  </div>
+                  <div class="manage-row__actions">
+                    <button class="manage-row__btn" type="button" id="instance-loader-install-btn">Install&hellip;</button>
+                    <button class="manage-row__btn manage-row__btn--danger" type="button" id="instance-loader-remove-btn" hidden>Remove</button>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
 
-          <section>
-            <p class="content-section__title">Version</p>
-            <div class="manage-list">
-              <div class="manage-row">
-                <div class="manage-row__info">
-                  <span class="manage-row__name" id="instance-version-name">Minecraft &mdash;</span>
+          <div class="instance-tab-panel" data-instance-tab-panel="mods">
+            <section>
+              <div class="content-section__header">
+                <p class="content-section__title">Mods</p>
+                <div class="content-section__header-actions">
+                  <button class="modal__btn" type="button" id="mods-open-folder-btn">Open folder</button>
+                  <button class="modal__btn" type="button" id="mods-browse-btn" title="Install a mod loader first" disabled>Browse mods&hellip;</button>
+                  <button class="modal__btn modal__btn--danger" type="button" id="mods-delete-btn" disabled>Delete</button>
+                  <button class="modal__btn modal__btn--primary" type="button" id="mods-add-btn">Add mod</button>
                 </div>
-                <button class="manage-row__btn" type="button" id="instance-version-btn">Change version</button>
               </div>
-              <div class="manage-row">
-                <div class="manage-row__info">
-                  <span class="manage-row__name">Mod Loader &mdash; None</span>
-                </div>
-                <button class="manage-row__btn" type="button" disabled title="Not implemented yet">Install&hellip;</button>
+              <div class="manage-list" id="mods-list"></div>
+            </section>
+          </div>
+
+          <div class="instance-tab-panel" data-instance-tab-panel="worlds">
+            <section>
+              <div class="content-section__header">
+                <p class="content-section__title">Worlds</p>
+                <button class="modal__btn" type="button" id="worlds-open-folder-btn">Open folder</button>
               </div>
-            </div>
-          </section>
+              <div class="manage-list" id="worlds-list"></div>
+            </section>
+          </div>
 
-          <section>
-            <div class="content-section__header">
-              <p class="content-section__title">Mods</p>
-              <div class="content-section__header-actions">
-                <button class="modal__btn" type="button" id="mods-open-folder-btn">Open folder</button>
-                <button class="modal__btn modal__btn--primary" type="button" id="mods-add-btn">Add mod</button>
+          <div class="instance-tab-panel" data-instance-tab-panel="resource-packs">
+            <section>
+              <div class="content-section__header">
+                <p class="content-section__title">Resource Packs</p>
+                <button class="modal__btn" type="button" id="resource-packs-open-folder-btn">Open folder</button>
               </div>
-            </div>
-            <div class="manage-list" id="mods-list"></div>
-          </section>
+              <div class="manage-list" id="resource-packs-list"></div>
+            </section>
+          </div>
 
-          <section>
-            <div class="content-section__header">
-              <p class="content-section__title">Worlds</p>
-              <button class="modal__btn" type="button" id="worlds-open-folder-btn">Open folder</button>
-            </div>
-            <div class="manage-list" id="worlds-list"></div>
-          </section>
+          <div class="instance-tab-panel" data-instance-tab-panel="shader-packs">
+            <section>
+              <div class="content-section__header">
+                <p class="content-section__title">Shader Packs</p>
+                <button class="modal__btn" type="button" id="shader-packs-open-folder-btn">Open folder</button>
+              </div>
+              <div class="manage-list" id="shader-packs-list"></div>
+            </section>
+          </div>
 
-          <section>
-            <div class="content-section__header">
-              <p class="content-section__title">Resource Packs</p>
-              <button class="modal__btn" type="button" id="resource-packs-open-folder-btn">Open folder</button>
-            </div>
-            <div class="manage-list" id="resource-packs-list"></div>
-          </section>
+          <div class="instance-tab-panel" data-instance-tab-panel="screenshots">
+            <section>
+              <div class="content-section__header">
+                <p class="content-section__title">Screenshots</p>
+                <button class="modal__btn" type="button" id="screenshots-open-folder-btn">Open folder</button>
+              </div>
+              <div class="screenshot-grid" id="screenshots-grid"></div>
+            </section>
+          </div>
 
-          <section>
-            <div class="content-section__header">
-              <p class="content-section__title">Shader Packs</p>
-              <button class="modal__btn" type="button" id="shader-packs-open-folder-btn">Open folder</button>
-            </div>
-            <div class="manage-list" id="shader-packs-list"></div>
-          </section>
-
-          <section>
-            <div class="content-section__header">
-              <p class="content-section__title">Screenshots</p>
-              <button class="modal__btn" type="button" id="screenshots-open-folder-btn">Open folder</button>
-            </div>
-            <div class="screenshot-grid" id="screenshots-grid"></div>
-          </section>
-
-          <section>
-            <p class="content-section__title">Advanced</p>
-            <p class="modal__body">Low-level jar patching, MultiMC-style. Not implemented yet.</p>
-            <div class="instance-detail__actions">
-              <button class="modal__btn" type="button" disabled title="Not implemented yet">Add mod to jar-file Minecraft</button>
-              <button class="modal__btn" type="button" disabled title="Not implemented yet">Replace Minecraft.jar</button>
-              <button class="modal__btn" type="button" disabled title="Not implemented yet">Add agents</button>
-              <button class="modal__btn" type="button" disabled title="Not implemented yet">Add empty file</button>
-              <button class="modal__btn" type="button" disabled title="Not implemented yet">Import components</button>
-            </div>
-          </section>
+          <div class="instance-tab-panel" data-instance-tab-panel="advanced">
+            <section>
+              <p class="content-section__title">Advanced</p>
+              <p class="modal__body">Low-level jar patching, MultiMC-style. Not implemented yet.</p>
+              <div class="instance-detail__actions">
+                <button class="modal__btn" type="button" disabled title="Not implemented yet">Add mod to jar-file Minecraft</button>
+                <button class="modal__btn" type="button" disabled title="Not implemented yet">Replace Minecraft.jar</button>
+                <button class="modal__btn" type="button" disabled title="Not implemented yet">Add agents</button>
+                <button class="modal__btn" type="button" disabled title="Not implemented yet">Add empty file</button>
+                <button class="modal__btn" type="button" disabled title="Not implemented yet">Import components</button>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
 
@@ -457,6 +510,84 @@
           <div class="version-select-list" id="change-version-versions"></div>
           <div class="modal__actions">
             <button class="modal__btn" type="button" id="change-version-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="install-loader-modal">
+        <div class="modal__panel modal__panel--wide">
+          <p class="modal__eyebrow">Install mod loader</p>
+          <div class="skin-variant" id="loader-kind-options">
+            <button class="skin-variant__option" type="button" data-kind="Fabric">Fabric</button>
+            <button class="skin-variant__option" type="button" data-kind="Forge">Forge</button>
+            <button class="skin-variant__option" type="button" data-kind="NeoForge">NeoForge</button>
+            <button class="skin-variant__option" type="button" data-kind="Quilt">Quilt</button>
+          </div>
+          <div class="version-select-list" id="install-loader-versions"></div>
+          <p class="modal__error" id="install-loader-error" hidden></p>
+          <div class="progress" id="install-loader-progress" hidden>
+            <div class="progress__row">
+              <span class="progress__label" id="install-loader-progress-label">Installing&hellip;</span>
+              <span class="progress__percent" id="install-loader-progress-percent">0%</span>
+            </div>
+            <div class="progress__track">
+              <div class="progress__fill" id="install-loader-progress-fill"></div>
+            </div>
+          </div>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="install-loader-confirm">Install</button>
+            <button class="modal__btn" type="button" id="install-loader-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="browse-mods-modal">
+        <div class="modal__panel modal__panel--wide modal__panel--browse-mods">
+          <p class="modal__eyebrow">Browse mods</p>
+          <div class="skin-variant" id="mod-source-options">
+            <button class="skin-variant__option" type="button" data-source="Modrinth">Modrinth</button>
+            <span class="mod-source-cf-wrap">
+              <button class="skin-variant__option" type="button" data-source="CurseForge" id="mod-source-curseforge">CurseForge</button>
+              <span class="mod-source-cf-hint" id="browse-mods-hint">Paste a CurseForge API key in Settings to enable this source.</span>
+            </span>
+          </div>
+          <input class="modal__input" type="text" id="browse-mods-query" placeholder="Search mods&hellip;" autocomplete="off" />
+          <p class="modal__error" id="browse-mods-error" hidden></p>
+          <div class="browse-mods__layout">
+            <div class="version-select-list browse-mods__list" id="browse-mods-results"></div>
+            <div class="mod-detail-pane" id="mod-detail-pane">
+              <p class="placeholder-text" id="mod-detail-placeholder">Select a mod to see details.</p>
+              <div id="mod-detail-content" hidden>
+                <p class="mod-detail__title" id="mod-detail-title"></p>
+                <p class="mod-detail__meta" id="mod-detail-meta"></p>
+                <div class="mod-detail__body" id="mod-detail-body"></div>
+              </div>
+            </div>
+          </div>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="browse-mods-review-btn" disabled>Review &amp; Install (0)</button>
+            <button class="modal__btn" type="button" id="browse-mods-close">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="review-mods-modal">
+        <div class="modal__panel modal__panel--wide">
+          <p class="modal__eyebrow">Review &amp; install</p>
+          <div class="version-select-list" id="review-mods-list"></div>
+          <p class="modal__error" id="review-mods-error" hidden></p>
+          <div class="progress" id="review-mods-progress" hidden>
+            <div class="progress__row">
+              <span class="progress__label" id="review-mods-progress-label">Installing&hellip;</span>
+              <span class="progress__percent" id="review-mods-progress-percent">0%</span>
+            </div>
+            <div class="progress__track">
+              <div class="progress__fill" id="review-mods-progress-fill"></div>
+            </div>
+          </div>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="review-mods-confirm">Install</button>
+            <button class="modal__btn" type="button" id="review-mods-cancel">Cancel</button>
           </div>
         </div>
       </div>

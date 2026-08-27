@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -7,6 +7,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::config::LauncherConfig;
 use crate::error::{io_err, CoreError, Result};
+use crate::modsource::{ModProvenanceEntry, ModSource};
 
 /// A self-contained "instance" of a Minecraft version to play, in the same sense Prism Launcher
 /// uses the word: its own `saves`/`resourcepacks`/`shaderpacks`/`config` (and, once Beacon
@@ -30,6 +31,41 @@ pub struct Instance {
     /// Play tab rotates through every screenshot instead of locking onto one.
     #[serde(default)]
     pub pinned_screenshot: Option<String>,
+    /// The mod loader installed on top of `version_id`, if any. Tied to that specific vanilla
+    /// version -- changing `version_id` clears this (see `set_instance_version_cmd`), since a
+    /// loader build only ever targets one Minecraft version.
+    #[serde(default)]
+    pub mod_loader: Option<ModLoaderInfo>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ModLoaderKind {
+    Fabric,
+    Forge,
+    NeoForge,
+    Quilt,
+}
+
+impl ModLoaderKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            ModLoaderKind::Fabric => "Fabric",
+            ModLoaderKind::Forge => "Forge",
+            ModLoaderKind::NeoForge => "NeoForge",
+            ModLoaderKind::Quilt => "Quilt",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModLoaderInfo {
+    pub kind: ModLoaderKind,
+    /// The loader's own version string (e.g. `"0.15.11"`, `"54.1.18"`) -- for display only.
+    pub loader_version: String,
+    /// The id of the merged (vanilla + loader) version JSON cached under `versions_dir()` --
+    /// what `install_version`/`launch` actually use to run this instance. Not user-facing.
+    pub effective_version_id: String,
 }
 
 impl Instance {
@@ -131,6 +167,7 @@ pub fn create_instance(
         version_id: version_id.into(),
         icon_path: None,
         pinned_screenshot: None,
+        mod_loader: None,
     })
 }
 
@@ -220,6 +257,17 @@ fn list_dir_entries(dir: &Path) -> Result<Vec<String>> {
 pub struct WorldInfo {
     pub name: String,
     pub datapacks: Vec<String>,
+    /// Vanilla writes `icon.png` at the save's root the first time it's loaded into -- `None` for
+    /// a world that's never been opened yet, not an error.
+    pub icon_data_url: Option<String>,
+}
+
+/// Reads a plain (non-zipped) `icon.png` at `dir`'s root, if present -- used for both world saves
+/// and unpacked resource pack folders, the two places this convention shows up as a loose file
+/// rather than inside a zip.
+fn read_loose_icon(dir: &Path, file_name: &str) -> Option<String> {
+    let bytes = std::fs::read(dir.join(file_name)).ok()?;
+    Some(crate::mod_metadata::encode_icon_data_url(&bytes, file_name))
 }
 
 /// Lists this instance's saved worlds (each a subdirectory of `saves/`), and, per world, the
@@ -229,17 +277,48 @@ pub fn list_worlds(config: &LauncherConfig, instance: &Instance) -> Result<Vec<W
     let saves_dir = instance.saves_dir(config);
     let mut worlds = Vec::new();
     for name in list_dir_entries(&saves_dir)? {
-        if !saves_dir.join(&name).is_dir() {
+        let world_dir = saves_dir.join(&name);
+        if !world_dir.is_dir() {
             continue;
         }
-        let datapacks = list_dir_entries(&saves_dir.join(&name).join("datapacks"))?;
-        worlds.push(WorldInfo { name, datapacks });
+        let datapacks = list_dir_entries(&world_dir.join("datapacks"))?;
+        let icon_data_url = read_loose_icon(&world_dir, "icon.png");
+        worlds.push(WorldInfo { name, datapacks, icon_data_url });
     }
     Ok(worlds)
 }
 
-pub fn list_resource_packs(config: &LauncherConfig, instance: &Instance) -> Result<Vec<String>> {
-    list_dir_entries(&instance.resource_packs_dir(config))
+#[derive(Debug, Clone, Serialize)]
+pub struct ResourcePackInfo {
+    pub name: String,
+    /// The pack's own `pack.png`, if it has one -- read from inside the zip for a `.zip` pack, or
+    /// as a loose file for an unpacked folder. `None` isn't an error; plenty of packs skip it.
+    pub icon_data_url: Option<String>,
+}
+
+/// A resource pack is either a `.zip` (read `pack.png` from inside it) or an unpacked folder (read
+/// `pack.png` as a loose file) -- both are valid ways Minecraft itself accepts a pack.
+fn read_pack_icon(path: &Path) -> Option<String> {
+    if path.is_dir() {
+        return read_loose_icon(path, "pack.png");
+    }
+    let file = std::fs::File::open(path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut entry = archive.by_name("pack.png").ok()?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut bytes).ok()?;
+    Some(crate::mod_metadata::encode_icon_data_url(&bytes, "pack.png"))
+}
+
+pub fn list_resource_packs(config: &LauncherConfig, instance: &Instance) -> Result<Vec<ResourcePackInfo>> {
+    let dir = instance.resource_packs_dir(config);
+    Ok(list_dir_entries(&dir)?
+        .into_iter()
+        .map(|name| {
+            let icon_data_url = read_pack_icon(&dir.join(&name));
+            ResourcePackInfo { name, icon_data_url }
+        })
+        .collect())
 }
 
 pub fn list_shader_packs(config: &LauncherConfig, instance: &Instance) -> Result<Vec<String>> {
@@ -283,21 +362,30 @@ pub struct ModInfo {
     /// stripped, so the frontend doesn't need to know about the convention to display it.
     pub name: String,
     pub enabled: bool,
+    /// Read from the jar's own Fabric/Quilt/Forge/NeoForge manifest -- `None` for a mod loader
+    /// Beacon doesn't recognize the metadata shape of, not an error.
+    pub version: Option<String>,
+    pub icon_data_url: Option<String>,
 }
 
 /// Lists this instance's mods (each a `.jar` or disabled `.jar.disabled` file directly in
-/// `mods/`).
+/// `mods/`), reading each one's own version/icon out of its Fabric/Quilt/Forge/NeoForge manifest.
 pub fn list_mods(config: &LauncherConfig, instance: &Instance) -> Result<Vec<ModInfo>> {
     let mods_dir = instance.mods_dir(config);
     let mut mods = Vec::new();
     for entry in list_dir_entries(&mods_dir)? {
-        if let Some(name) = entry.strip_suffix(DISABLED_SUFFIX) {
-            if name.ends_with(".jar") {
-                mods.push(ModInfo { name: name.to_string(), enabled: false });
+        let (name, enabled, jar_file_name) = if let Some(name) = entry.strip_suffix(DISABLED_SUFFIX) {
+            if !name.ends_with(".jar") {
+                continue;
             }
+            (name.to_string(), false, entry.clone())
         } else if entry.ends_with(".jar") {
-            mods.push(ModInfo { name: entry, enabled: true });
-        }
+            (entry.clone(), true, entry.clone())
+        } else {
+            continue;
+        };
+        let metadata = crate::mod_metadata::read_mod_metadata(&mods_dir.join(&jar_file_name));
+        mods.push(ModInfo { name, enabled, version: metadata.version, icon_data_url: metadata.icon_data_url });
     }
     Ok(mods)
 }
@@ -339,6 +427,42 @@ pub fn add_mods(config: &LauncherConfig, instance: &Instance, source_paths: &[Pa
     Ok(())
 }
 
+/// Sidecar file recording which mod-browser install a jar came from -- deliberately not a
+/// `config.json`/`Instance` field, since it's a growing collection tied 1:1 to files in `mods/`,
+/// same spirit as the `.disabled` suffix convention already used there. Hidden (dot-prefixed), so
+/// `list_dir_entries`'s existing `!name.starts_with('.')` filter already keeps it out of
+/// `list_mods`/`list_dir_entries` callers without any extra filtering here.
+const MOD_SOURCES_FILE: &str = ".beacon-mod-sources.json";
+
+fn read_mod_provenance_file(mods_dir: &Path) -> HashMap<String, ModProvenanceEntry> {
+    std::fs::read(mods_dir.join(MOD_SOURCES_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Records that `filename` (already installed in `mods/`) came from `source`'s `project_id` --
+/// called once per root mod right after the mod-browser's install succeeds. Dependencies pulled in
+/// alongside it are deliberately left untracked (see module-level plan notes): removing a mod only
+/// ever removes its own file, never a shared dependency another mod might also need.
+pub fn record_mod_provenance(config: &LauncherConfig, instance: &Instance, filename: &str, source: ModSource, project_id: &str) -> Result<()> {
+    let mods_dir = instance.mods_dir(config);
+    std::fs::create_dir_all(&mods_dir).map_err(io_err(&mods_dir))?;
+    let mut map = read_mod_provenance_file(&mods_dir);
+    map.insert(filename.to_string(), ModProvenanceEntry { source, project_id: project_id.to_string() });
+    let path = mods_dir.join(MOD_SOURCES_FILE);
+    std::fs::write(&path, serde_json::to_vec_pretty(&map)?).map_err(io_err(&path))?;
+    Ok(())
+}
+
+/// Reads back what `record_mod_provenance` wrote, filtered to files that still actually exist --
+/// self-healing against a jar deleted some other way (the ordinary Mods list's own Remove button,
+/// or by hand) without needing to hook every deletion path to also prune this file.
+pub fn load_mod_provenance(config: &LauncherConfig, instance: &Instance) -> HashMap<String, ModProvenanceEntry> {
+    let mods_dir = instance.mods_dir(config);
+    read_mod_provenance_file(&mods_dir).into_iter().filter(|(filename, _)| mods_dir.join(filename).is_file()).collect()
+}
+
 pub fn delete_world(config: &LauncherConfig, instance: &Instance, world_name: &str) -> Result<()> {
     remove_entry(&instance.saves_dir(config), world_name)
 }
@@ -363,6 +487,8 @@ pub fn delete_shader_pack(config: &LauncherConfig, instance: &Instance, file_nam
 struct ExportManifest {
     name: String,
     version_id: String,
+    #[serde(default)]
+    mod_loader: Option<ModLoaderInfo>,
 }
 
 const MANIFEST_ENTRY_NAME: &str = "beacon-instance.json";
@@ -380,6 +506,7 @@ pub fn export_instance(config: &LauncherConfig, instance: &Instance, dest_zip: &
     let manifest = ExportManifest {
         name: instance.name.clone(),
         version_id: instance.version_id.clone(),
+        mod_loader: instance.mod_loader.clone(),
     };
     zip.start_file(MANIFEST_ENTRY_NAME, options)?;
     zip.write_all(&serde_json::to_vec_pretty(&manifest)?).map_err(io_err(dest_zip))?;
@@ -437,6 +564,10 @@ pub fn import_instance(config: &LauncherConfig, source_zip: &Path) -> Result<Ins
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Imported instance".to_string());
+    // A carried-over `mod_loader` names a merged version JSON cached under this machine's own
+    // `versions_dir()` -- which won't exist here (or on a fresh machine) until it's reinstalled.
+    // Rather than have `launch` fail confusingly on a missing cache entry, drop it on import and
+    // let the instance detail screen show "no mod loader installed", same as any other instance.
     let (name, version_id) = match manifest {
         Some(m) => (m.name, m.version_id),
         None => (fallback_name, String::new()),
@@ -466,5 +597,5 @@ pub fn import_instance(config: &LauncherConfig, source_zip: &Path) -> Result<Ins
         std::io::copy(&mut entry, &mut out_file).map_err(io_err(&out_path))?;
     }
 
-    Ok(Instance { id, name, version_id, icon_path: None, pinned_screenshot: None })
+    Ok(Instance { id, name, version_id, icon_path: None, pinned_screenshot: None, mod_loader: None })
 }

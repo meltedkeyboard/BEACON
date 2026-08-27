@@ -4,7 +4,7 @@ mod state;
 use beacon_core::config::{default_config_path, LauncherConfig};
 use tauri::Manager;
 
-use commands::{accounts, instances, launch, settings, skins};
+use commands::{accounts, instances, launch, mod_browser, modloader, settings, skins};
 use state::AppState;
 
 /// First launch (no saved `window-state` file yet): tauri.conf.json's static fallback size is
@@ -86,11 +86,7 @@ pub fn run() {
             let config_path = default_config_path();
             let config = tauri::async_runtime::block_on(LauncherConfig::load_or_default(&config_path))?;
             instances::allow_existing_icons(app.handle(), &config);
-            app.manage(AppState {
-                http: beacon_core::http_client(),
-                config: tokio::sync::Mutex::new(config),
-                config_path,
-            });
+            app.manage(AppState::new(beacon_core::http_client(), config, config_path));
 
             position_main_window(app.handle())?;
             Ok(())
@@ -129,6 +125,18 @@ pub fn run() {
             instances::set_pinned_screenshot_cmd,
             instances::export_instance_cmd,
             instances::import_instance_cmd,
+            modloader::list_loader_versions_cmd,
+            modloader::install_loader_cmd,
+            modloader::remove_loader_cmd,
+            mod_browser::search_mods_cmd,
+            mod_browser::list_mod_versions_cmd,
+            mod_browser::get_mod_description_cmd,
+            mod_browser::preview_mod_install_cmd,
+            mod_browser::install_selected_mods_cmd,
+            mod_browser::list_mod_provenance_cmd,
+            mod_browser::remove_mod_source_cmd,
+            mod_browser::set_curseforge_api_key_cmd,
+            mod_browser::has_curseforge_api_key_cmd,
             settings::get_directory_settings,
             settings::set_game_dir_cmd,
             settings::set_instances_dir_cmd,

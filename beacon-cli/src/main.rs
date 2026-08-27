@@ -46,6 +46,33 @@ enum Command {
         #[arg(long)]
         java: Option<String>,
     },
+    /// Install a mod loader on top of a vanilla version (test harness for the loader pipeline --
+    /// downloads/runs everything the GUI would, prints the resulting effective version id).
+    InstallLoader {
+        version: String,
+        /// fabric | forge | neoforge | quilt
+        kind: String,
+        loader_version: String,
+    },
+    /// Search Modrinth for mods compatible with a given (version, loader) pair (test harness).
+    SearchMods {
+        query: String,
+        version: String,
+        /// fabric | forge | neoforge | quilt
+        loader: String,
+    },
+    /// List every Modrinth version compatible with an instance's version/loader (test harness).
+    ListModVersions { instance_id: String, project_id: String },
+    /// Read a mod jar's own version/icon metadata (test harness for the Mods table's data).
+    ReadModMetadata { jar_path: String },
+    /// Install a mod (and its required Modrinth dependencies) into an instance (test harness).
+    InstallMod {
+        instance_id: String,
+        project_id: String,
+        /// Explicit version id instead of auto-picking the newest compatible one.
+        #[arg(long)]
+        version: Option<String>,
+    },
     /// Sign in with a Microsoft account (device code flow) and save it
     LoginMicrosoft,
     /// List saved accounts
@@ -128,6 +155,75 @@ async fn main() -> anyhow::Result<()> {
             let status = child.wait().await?;
             std::process::exit(status.code().unwrap_or(0));
         }
+        Command::InstallLoader { version, kind, loader_version } => {
+            let config = LauncherConfig::load_or_default(&config_path).await?;
+            let kind = parse_loader_kind(&kind)?;
+            let merged = beacon_core::modloader::install(
+                &http,
+                &config,
+                kind,
+                &version,
+                &loader_version,
+                Some(progress_callback()),
+            )
+            .await?;
+            println!(
+                "\n{kind:?} {loader_version} installed on {version} -- effective version id: {}",
+                merged.id
+            );
+        }
+        Command::SearchMods { query, version, loader } => {
+            let kind = parse_loader_kind(&loader)?;
+            let results = beacon_core::modsource::modrinth::search(&http, &query, kind, &version, 0).await?;
+            for r in &results {
+                println!("{:<24} {:<40} downloads={}", r.id, r.title, r.downloads);
+            }
+        }
+        Command::ListModVersions { instance_id, project_id } => {
+            let config = LauncherConfig::load_or_default(&config_path).await?;
+            let instance = config
+                .find_instance(&instance_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("no instance '{instance_id}'"))?;
+            let kind = instance
+                .mod_loader
+                .as_ref()
+                .map(|l| l.kind)
+                .ok_or_else(|| anyhow::anyhow!("instance '{instance_id}' has no mod loader installed"))?;
+            let versions = beacon_core::modsource::modrinth::list_versions(&http, &project_id, kind, &instance.version_id).await?;
+            for v in &versions {
+                println!("{:<12} {:<24} {}", v.id, v.version_number, v.filename);
+            }
+        }
+        Command::ReadModMetadata { jar_path } => {
+            let metadata = beacon_core::mod_metadata::read_mod_metadata(std::path::Path::new(&jar_path));
+            println!("version: {:?}", metadata.version);
+            println!("icon_data_url: {} bytes", metadata.icon_data_url.map(|s| s.len()).unwrap_or(0));
+        }
+        Command::InstallMod { instance_id, project_id, version } => {
+            let config = LauncherConfig::load_or_default(&config_path).await?;
+            let instance = config
+                .find_instance(&instance_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("no instance '{instance_id}'"))?;
+            let kind = instance
+                .mod_loader
+                .as_ref()
+                .map(|l| l.kind)
+                .ok_or_else(|| anyhow::anyhow!("instance '{instance_id}' has no mod loader installed"))?;
+            let filename = beacon_core::modsource::modrinth::install(
+                &http,
+                &config,
+                &instance,
+                &project_id,
+                version.as_deref(),
+                kind,
+                Some(progress_callback()),
+            )
+            .await?;
+            beacon_core::instance::record_mod_provenance(&config, &instance, &filename, beacon_core::modsource::ModSource::Modrinth, &project_id)?;
+            println!("\ninstalled {filename} into {}", instance.mods_dir(&config).display());
+        }
         Command::LoginMicrosoft => {
             let mut config = LauncherConfig::load_or_default(&config_path).await?;
             let (account, session) = login_with_device_code(&http, &config.azure_client_id, |auth| {
@@ -184,6 +280,16 @@ fn forward_lines(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static, to_
             }
         }
     });
+}
+
+fn parse_loader_kind(kind: &str) -> anyhow::Result<beacon_core::ModLoaderKind> {
+    match kind.to_ascii_lowercase().as_str() {
+        "fabric" => Ok(beacon_core::ModLoaderKind::Fabric),
+        "forge" => Ok(beacon_core::ModLoaderKind::Forge),
+        "neoforge" => Ok(beacon_core::ModLoaderKind::NeoForge),
+        "quilt" => Ok(beacon_core::ModLoaderKind::Quilt),
+        other => anyhow::bail!("unknown loader kind '{other}' (expected fabric/forge/neoforge/quilt)"),
+    }
 }
 
 fn progress_callback() -> Arc<dyn Fn(DownloadProgress) + Send + Sync> {

@@ -115,6 +115,14 @@ impl LauncherConfig {
         self.version_dir(version_id).join("natives")
     }
 
+    /// Scratch space for mod loader installer jars and files extracted from them (Forge/NeoForge
+    /// only -- Fabric/Quilt need no local installer). Not part of the shared vanilla download
+    /// cache above; safe to delete entirely at any time, everything in it is re-derived from a
+    /// re-downloaded installer jar if needed again.
+    pub fn loader_installers_dir(&self) -> PathBuf {
+        self.game_dir.join("loader-installers")
+    }
+
     /// Root of every instance's own directory (see [`crate::instance::Instance::dir`]) --
     /// separate from `versions_dir`/`libraries_dir`/`assets_dir`, which are the *shared*
     /// per-version download cache every instance targeting that version reuses. Defaults to

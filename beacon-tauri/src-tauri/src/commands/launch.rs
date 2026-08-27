@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use beacon_core::downloader::{DownloadProgress, ProgressCallback};
 use beacon_core::{
-    install_version, launch, offline_account, refresh_session, Account, CoreError, LaunchOptions,
+    install_version, launch, offline_account, Account, CoreError, LaunchOptions,
     VersionEntry,
 };
 use tauri::{AppHandle, Emitter, State};
@@ -65,13 +65,20 @@ pub async fn launch_instance_cmd(
         .find_instance(&instance_id)
         .cloned()
         .ok_or_else(|| log_err(CoreError::Other(format!("no instance '{instance_id}'"))))?;
-    eprintln!("[beacon] launch_instance_cmd: target version={}", instance.version_id);
+    // A mod loader's merged version JSON is what's actually installed/launched -- `version_id`
+    // itself always stays the plain vanilla id the instance's "Minecraft X.Y" label shows.
+    let effective_version_id = instance
+        .mod_loader
+        .as_ref()
+        .map(|l| l.effective_version_id.clone())
+        .unwrap_or_else(|| instance.version_id.clone());
+    eprintln!("[beacon] launch_instance_cmd: target version={effective_version_id}");
 
     let progress_app = app.clone();
     let on_progress: ProgressCallback = Arc::new(move |progress: DownloadProgress| {
         let _ = progress_app.emit("install-progress", progress);
     });
-    let version_data = install_version(&state.http, &config, &instance.version_id, Some(on_progress))
+    let version_data = install_version(&state.http, &config, &effective_version_id, Some(on_progress))
         .await
         .map_err(log_err)?;
 
@@ -89,12 +96,8 @@ pub async fn launch_instance_cmd(
             // refresh, offline ones just launch as-is.
             let session = match &account {
                 Account::Microsoft { .. } => {
-                    eprintln!("[beacon] launch_instance_cmd: refreshing Microsoft session for '{account_id}'");
-                    Some(
-                        refresh_session(&state.http, &config.azure_client_id, &account)
-                            .await
-                            .map_err(log_err)?,
-                    )
+                    eprintln!("[beacon] launch_instance_cmd: session for '{account_id}' (cached if still fresh)");
+                    Some(state.minecraft_session(&config, &account).await.map_err(log_err)?)
                 }
                 Account::Offline { .. } => {
                     eprintln!("[beacon] launch_instance_cmd: saved offline account '{account_id}'");

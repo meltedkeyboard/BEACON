@@ -322,6 +322,7 @@ dependencies = [
  "sha1",
  "thiserror 2.0.20",
  "tokio",
+ "toml 0.8.2",
  "tracing",
  "uuid",
  "zip",

@@ -276,6 +276,10 @@ button {
 .accounts-screen__body {
   flex: 1;
   overflow-y: auto;
+  /* A wide flex row that can't fully shrink (e.g. the Advanced tab's row of disabled buttons)
+     must never widen this whole scrolling column -- without this, overflow drags the entire body,
+     header included, sideways instead of just clipping/wrapping the one row that's too wide. */
+  overflow-x: hidden;
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
@@ -317,6 +321,26 @@ button {
 
 .settings-row--path {
   align-items: flex-start;
+}
+
+/* For a row whose actions cluster is unusually wide (e.g. a text input plus several buttons) --
+   wraps the actions onto their own line below the label/hint instead of squeezing
+   .settings-row__info toward zero width to make room. */
+.settings-row--wrap {
+  flex-wrap: wrap;
+}
+
+.settings-row--wrap .settings-row__info {
+  flex: 1 1 260px;
+}
+
+.settings-row--wrap .settings-row__path-actions {
+  flex-wrap: wrap;
+}
+
+.settings-row--wrap .modal__input {
+  width: auto;
+  flex: 1 1 180px;
 }
 
 .settings-row--danger {
@@ -470,6 +494,18 @@ button {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+.instance-detail__top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.instance-detail__top-actions .modal__btn {
+  flex: none;
+  padding: 10px 18px;
 }
 
 .instance-detail__icon {
@@ -1068,6 +1104,94 @@ button {
   color: var(--dim);
 }
 
+/* ---------- instance-detail screen's own tabs ----------
+   A second, independent tab bar scoped inside one instance's detail screen (Overview/Mods/
+   Worlds/...), so each section gets its own scroll instead of one long page. Reuses `.tabs`/`.tab`
+   wholesale for visual consistency with the app's top-level tabs, but deliberately does NOT reuse
+   `.tab-panel`'s absolute-position crossfade -- that requires a fixed-height positioned ancestor
+   (`.panel__body`), which `.accounts-screen__body` (a normal scrolling flex column, shared with
+   Settings/Accounts) doesn't have. A plain display toggle lets the existing outer scroll container
+   just work per active panel's own content height. Wired by a small dedicated controller in
+   `instances.ts`, independent of `tabs.ts`'s top-level `[data-tab]` handling -- a different
+   attribute name (`data-instance-tab`) avoids that global selector picking these up too. */
+.instance-tabs {
+  /* `.tabs`' own 36px gap assumes the top-level bar's much wider `.panel` content area -- seven
+     tabs at that spacing genuinely don't fit this screen's narrower 640px-max column (confirmed:
+     560px available, ~654px needed), which is what was actually forcing the whole scrolling
+     `.accounts-screen__body` wider than its container instead of just wrapping. */
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.instance-tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.instance-tab-panel.is-active {
+  display: flex;
+}
+
+/* ---------- overflow menu (instance-detail's "..." button for rarer actions) ----------
+   Same dropdown shape as .account-menu, generalized under its own name since it's not
+   account-specific -- toggled the same way (a trigger button + an absolutely positioned panel),
+   closed by the same document click-outside handling `tabs.ts` already does for the account menu
+   and instance picker. */
+.overflow-menu {
+  position: relative;
+}
+
+.overflow-menu__trigger {
+  width: 40px;
+  height: 40px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.overflow-menu__trigger:hover {
+  background: var(--bg-app);
+}
+
+.overflow-menu__panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.overflow-menu.is-open .overflow-menu__panel {
+  display: block;
+}
+
+.overflow-menu__item {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.overflow-menu__item + .overflow-menu__item {
+  border-top: 1px solid var(--border);
+}
+
+.overflow-menu__item:hover {
+  background: var(--bg-app);
+}
+
 /* ---------- version rows (used inside the picker dropdown) ---------- */
 
 .version-row {
@@ -1503,6 +1627,103 @@ button {
   text-align: left;
 }
 
+/* Browse mods needs room for the two-column list+detail layout below. */
+.modal__panel--browse-mods {
+  width: 760px;
+  max-width: calc(100vw - 80px);
+}
+
+/* CurseForge source hint -- shown only on hover/focus of the button itself, not always visible,
+   since the button's own disabled state already communicates "unavailable" at a glance. */
+.mod-source-cf-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+.mod-source-cf-hint {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--danger);
+  font-size: 12px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+.mod-source-cf-wrap:hover .mod-source-cf-hint,
+.mod-source-cf-wrap:focus-within .mod-source-cf-hint {
+  opacity: 1;
+  visibility: visible;
+}
+
+.browse-mods__layout {
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+}
+
+.browse-mods__list {
+  flex: 1 1 300px;
+  max-height: 320px;
+}
+
+.mod-detail-pane {
+  flex: 1 1 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+}
+
+.mod-detail__title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.mod-detail__meta {
+  margin: 0 0 12px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.mod-detail__body {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mod-detail__body :is(h1, h2, h3) {
+  font-size: 14px;
+  margin: 14px 0 6px;
+}
+
+.mod-detail__body p {
+  margin: 0 0 10px;
+}
+
+.mod-detail__body img {
+  max-width: 100%;
+}
+
+.mod-detail__body a {
+  color: var(--beacon);
+}
+
+.manage-row__checkbox {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--beacon);
+}
+
 .modal__input {
   width: 100%;
   padding: 12px 14px;
@@ -1540,6 +1761,22 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
+/* Click/Ctrl+click/Shift+click row selection (Mods tab) -- a selectable row is itself a
+   plain `<div>`, not a `<button>`, so this is the only visual cue a row is selected. */
+.manage-row--selectable {
+  cursor: default;
+  /* Shift+click for range selection would otherwise also trigger the browser's own native text
+     selection on the row's text content (a `<div>` row isn't a form control, so nothing suppresses
+     it by default) -- distracting during a selection gesture that already has its own visual
+     feedback via `.is-selected`. */
+  user-select: none;
+}
+
+.manage-row--selectable.is-selected {
+  background: var(--bg-app);
+  box-shadow: inset 3px 0 0 var(--beacon);
+}
+
 .manage-row:last-child {
   border-bottom: none;
 }
@@ -1555,6 +1792,25 @@ button {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+/* Search result icon (Browse mods modal) -- sits before .manage-row__info in the same row. */
+.manage-row__icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background-color: var(--panel-art);
+  background-size: cover;
+  background-position: center;
+}
+
+.manage-row__description {
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .manage-row__name {

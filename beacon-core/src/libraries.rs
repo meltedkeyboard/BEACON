@@ -5,9 +5,15 @@ use crate::manifest::Library;
 use crate::rules::{current_arch, native_classifier_for, rules_allow, FeatureFlags};
 
 /// Builds the standard Maven repository-layout path for a library coordinate string
-/// (`group:artifact:version[:classifier]`), e.g. `com.mojang:brigadier:1.0.18` becomes
-/// `com/mojang/brigadier/1.0.18/brigadier-1.0.18.jar`.
+/// (`group:artifact:version[:classifier][@extension]`), e.g. `com.mojang:brigadier:1.0.18`
+/// becomes `com/mojang/brigadier/1.0.18/brigadier-1.0.18.jar`. The `@extension` form (used by
+/// Forge/NeoForge install-profile `data` entries for non-jar artifacts, e.g.
+/// `net.minecraft:client:1.21.4:mappings@tsrg`) overrides the default `jar` extension.
 pub fn maven_path(coordinate: &str, classifier: Option<&str>) -> String {
+    let (coordinate, extension) = match coordinate.split_once('@') {
+        Some((c, ext)) => (c, ext),
+        None => (coordinate, "jar"),
+    };
     let mut parts = coordinate.split(':');
     let group = parts.next().unwrap_or_default();
     let artifact = parts.next().unwrap_or_default();
@@ -17,8 +23,8 @@ pub fn maven_path(coordinate: &str, classifier: Option<&str>) -> String {
     let group_path = group.replace('.', "/");
     let classifier = classifier.or(extra_classifier);
     let file_name = match classifier {
-        Some(c) => format!("{artifact}-{version}-{c}.jar"),
-        None => format!("{artifact}-{version}.jar"),
+        Some(c) => format!("{artifact}-{version}-{c}.{extension}"),
+        None => format!("{artifact}-{version}.{extension}"),
     };
     format!("{group_path}/{artifact}/{version}/{file_name}")
 }

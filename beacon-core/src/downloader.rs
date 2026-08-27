@@ -32,6 +32,13 @@ pub struct DownloadProgress {
     pub files_total: u64,
     pub bytes_done: u64,
     pub bytes_total: u64,
+    /// How many of `files_done` were an actual network download, as opposed to a file that was
+    /// already on disk and passed its SHA1 check. On a fully up-to-date instance this stays 0 for
+    /// the whole batch -- callers use that to tell "downloading" from "just verifying what's
+    /// already there" instead of showing a download UI for a launch that never had anything to
+    /// download in the first place.
+    #[serde(default)]
+    pub downloaded_done: u64,
     pub current_file: Option<String>,
 }
 
@@ -167,9 +174,12 @@ pub async fn ensure_files(
         let downloaded = downloaded.clone();
         let on_progress = on_progress.clone();
         async move {
-            if ensure_file(&client, &task).await? {
-                downloaded.fetch_add(1, Ordering::SeqCst);
-            }
+            let was_downloaded = ensure_file(&client, &task).await?;
+            let downloaded_so_far = if was_downloaded {
+                downloaded.fetch_add(1, Ordering::SeqCst) + 1
+            } else {
+                downloaded.load(Ordering::SeqCst)
+            };
             let done = files_done.fetch_add(1, Ordering::SeqCst) + 1;
             let bytes = bytes_done.fetch_add(task.size.unwrap_or(0), Ordering::SeqCst)
                 + task.size.unwrap_or(0);
@@ -180,6 +190,7 @@ pub async fn ensure_files(
                     files_total,
                     bytes_done: bytes,
                     bytes_total,
+                    downloaded_done: downloaded_so_far,
                     current_file: task.dest.file_name().map(|n| n.to_string_lossy().into_owned()),
                 });
             }
