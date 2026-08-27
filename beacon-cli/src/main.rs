@@ -189,7 +189,8 @@ fn forward_lines(reader: impl tokio::io::AsyncRead + Unpin + Send + 'static, to_
 fn progress_callback() -> Arc<dyn Fn(DownloadProgress) + Send + Sync> {
     Arc::new(|progress: DownloadProgress| {
         print!(
-            "\rDownloading {}/{} files ({} bytes){:<30}",
+            "\rDownloading {}: {}/{} files ({} bytes){:<30}",
+            if progress.phase.is_empty() { "files" } else { &progress.phase },
             progress.files_done,
             progress.files_total,
             progress.bytes_done,

@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Minecraft game textures used as local-only UI icons during development -- not ours to
+# redistribute (see README's "Beacon does not redistribute any Minecraft game files").
+src/assets/icons/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

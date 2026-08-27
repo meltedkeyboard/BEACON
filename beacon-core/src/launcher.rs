@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 
 use tokio::process::{Child, Command};
 use uuid::Uuid;
@@ -8,13 +9,26 @@ use uuid::Uuid;
 use crate::account::Account;
 use crate::assets::install_assets;
 use crate::config::LauncherConfig;
-use crate::downloader::{ensure_files, DownloadTask, ProgressCallback};
+use crate::downloader::{ensure_files, DownloadProgress, DownloadTask, ProgressCallback};
 use crate::error::{CoreError, Result};
 use crate::libraries::{self, extract_natives};
 use crate::manifest::{
     fetch_version_data, fetch_version_manifest, ArgumentEntry, VersionData,
 };
 use crate::rules::{rules_allow, FeatureFlags};
+
+/// Wraps `on_progress` so every event it forwards is stamped with `phase` -- `ensure_files` has
+/// no idea whether a batch of tasks is libraries or assets, so the caller (here) is the only place
+/// that knows, and the UI wants that label (real launchers show "Downloading Libraries" /
+/// "Downloading Assets" rather than a bare percentage).
+fn with_phase(phase: &'static str, on_progress: Option<ProgressCallback>) -> Option<ProgressCallback> {
+    on_progress.map(|cb| -> ProgressCallback {
+        Arc::new(move |mut progress: DownloadProgress| {
+            progress.phase = phase.to_string();
+            cb(progress);
+        })
+    })
+}
 
 /// Downloads everything required to run `version_id`: client jar, libraries, natives and assets.
 /// Already-valid files (verified by SHA1) are skipped, so this is safe to call on every launch.
@@ -24,7 +38,15 @@ pub async fn install_version(
     version_id: &str,
     on_progress: Option<ProgressCallback>,
 ) -> Result<VersionData> {
+    eprintln!("[beacon] install_version: {version_id}");
     let version_data = load_or_fetch_version_data(client, config, version_id).await?;
+    eprintln!(
+        "[beacon] install_version: version data ready (type={}, main_class={}, {} libraries, asset index={})",
+        version_data.version_type,
+        version_data.main_class,
+        version_data.libraries.len(),
+        version_data.asset_index.id,
+    );
 
     let version_dir = config.version_dir(version_id);
     let client_jar_path = version_dir.join(format!("{version_id}.jar"));
@@ -36,11 +58,20 @@ pub async fn install_version(
     }];
 
     let resolved = libraries::resolve(&version_data.libraries, &config.libraries_dir(), &FeatureFlags);
+    eprintln!(
+        "[beacon] install_version: {} library download tasks, {} native archives to extract",
+        resolved.download_tasks.len(),
+        resolved.native_archives.len(),
+    );
     tasks.extend(resolved.download_tasks);
 
-    ensure_files(client, tasks, on_progress.clone()).await?;
+    eprintln!("[beacon] install_version: downloading client jar + libraries...");
+    ensure_files(client, tasks, with_phase("Libraries", on_progress.clone())).await?;
+    eprintln!("[beacon] install_version: extracting natives...");
     extract_natives(&resolved.native_archives, &config.natives_dir(version_id))?;
-    install_assets(client, &config.assets_dir(), &version_data.asset_index, on_progress).await?;
+    eprintln!("[beacon] install_version: downloading assets...");
+    install_assets(client, &config.assets_dir(), &version_data.asset_index, with_phase("Assets", on_progress)).await?;
+    eprintln!("[beacon] install_version: {version_id} fully installed");
 
     Ok(version_data)
 }
@@ -141,12 +172,19 @@ pub async fn launch(
     ms_session: Option<&crate::auth::MinecraftSession>,
     options: LaunchOptions,
 ) -> Result<Child> {
+    eprintln!("[beacon] launch: {} (account: {})", version_data.id, account.username());
     let resolved = libraries::resolve(&version_data.libraries, &config.libraries_dir(), &FeatureFlags);
     let client_jar = config
         .version_dir(&version_data.id)
         .join(format!("{}.jar", version_data.id));
     let classpath = build_classpath(&resolved.classpath, &client_jar);
     let natives_dir = config.natives_dir(&version_data.id);
+    eprintln!(
+        "[beacon] launch: classpath has {} entries, natives_dir={}, game_dir={}",
+        resolved.classpath.len() + 1,
+        natives_dir.display(),
+        options.game_dir.display(),
+    );
 
     let (auth_access_token, user_type, client_id, auth_xuid) = match account {
         Account::Offline { .. } => (String::new(), "legacy".to_string(), String::new(), String::new()),
@@ -197,12 +235,35 @@ pub async fn launch(
         ),
     };
 
+    let jvm_args: Vec<String> = jvm_template.iter().map(|arg| substitute(arg, &vars)).collect();
+    let game_args: Vec<String> = game_template.iter().map(|arg| substitute(arg, &vars)).collect();
+
+    // The access token would otherwise show up verbatim in `--accessToken <token>` -- redact it
+    // before this ever reaches a log line.
+    let redact = |s: &str| -> String {
+        let token = vars.get("auth_access_token").map(String::as_str).unwrap_or("");
+        if token.is_empty() { s.to_string() } else { s.replace(token, "<redacted>") }
+    };
+    eprintln!(
+        "[beacon] launch: {} {}",
+        options.java_path,
+        options
+            .extra_jvm_args
+            .iter()
+            .chain(jvm_args.iter())
+            .map(|s| redact(s))
+            .chain(std::iter::once(version_data.main_class.clone()))
+            .chain(game_args.iter().map(|s| redact(s)))
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+
     let mut command = Command::new(&options.java_path);
     command
         .args(options.extra_jvm_args)
-        .args(jvm_template.iter().map(|arg| substitute(arg, &vars)))
+        .args(jvm_args)
         .arg(&version_data.main_class)
-        .args(game_template.iter().map(|arg| substitute(arg, &vars)))
+        .args(game_args)
         .current_dir(&options.game_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -211,7 +272,16 @@ pub async fn launch(
         .await
         .map_err(crate::error::io_err(&options.game_dir))?;
 
-    command.spawn().map_err(CoreError::Launch)
+    match command.spawn() {
+        Ok(child) => {
+            eprintln!("[beacon] launch: JVM spawned (pid={:?})", child.id());
+            Ok(child)
+        }
+        Err(e) => {
+            eprintln!("[beacon] launch: failed to spawn JVM: {e}");
+            Err(CoreError::Launch(e))
+        }
+    }
 }
 
 /// Convenience: some code paths only care about the offline UUID, kept here so downstream

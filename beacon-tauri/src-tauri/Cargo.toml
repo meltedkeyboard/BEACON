@@ -19,8 +19,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 beacon-core = { path = "../../beacon-core" }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

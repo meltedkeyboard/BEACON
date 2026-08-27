@@ -1,3 +1,9 @@
+/* ---------- themes ----------
+   Every theme is just a set of token overrides -- structure, spacing and type never change,
+   only these values. "Beacon" (below, on bare :root) is the default. Switching themes sets
+   data-theme on <html> (see main.ts); the [data-theme="..."] blocks below only need to override
+   the tokens that actually differ from the default. */
+
 :root {
   --bg-app: #141414;
   --panel: #1e1e1e;
@@ -7,22 +13,110 @@
   --dim: #8c8a82;
   --beacon: #399e4d;
   --beacon-shade: #256b36;
+  --beacon-ink: #f4f2ec;
   --danger: #b33a3a;
 
   --font-ui: "Segoe UI Variable", "Segoe UI", -apple-system, "Noto Sans", "Cantarell", "Ubuntu", sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "Noto Sans Mono", monospace;
 
   --tab-motion: 160ms ease-out;
+  /* Shared by every direct control in the playbar (instance picker, Play) so the row reads as
+     one aligned strip instead of each control sizing itself off its own padding. */
+  --playbar-control-height: 56px;
+
+  /* Height of the custom window chrome -- modals and fullscreen screens both need to start
+     below it instead of covering it (see .titlebar and .modal). */
+  --titlebar-height: 36px;
+  --modal-motion: 200ms;
+  --screen-motion: 220ms;
+  --backdrop-motion: 800ms ease;
+
+  /* Play tab screenshot background -- set from Settings (main.ts), read by `.hero__backdrop-layer`. */
+  --screenshot-blur: 0px;
+}
+
+/* Amber Signal -- the launcher's original accent direction (a lighthouse's own lamp color)
+   before "Beacon" settled on the starboard-light green. Same dark structure, warmer light. */
+:root[data-theme="amber"] {
+  --beacon: #e3a73a;
+  --beacon-shade: #a8791f;
+  --beacon-ink: #1a1408;
+}
+
+/* Beacon Light -- same structure and accent relationship, inverted luminance. Not a naive
+   invert: panel/bg-app keep their "chrome recedes, content sits forward" relationship, and the
+   accent is deepened a step so it still reads clearly against a light surface. */
+:root[data-theme="light"] {
+  --bg-app: #dedcd4;
+  --panel: #f8f7f3;
+  --panel-art: #ffffff;
+  --border: #c7c4b9;
+  --ink: #201f1b;
+  --dim: #726f63;
+  --beacon: #2b7a3d;
+  --beacon-shade: #1c5228;
+  --beacon-ink: #f4f2ec;
+  --danger: #a23030;
+}
+
+/* Amber Light -- the light surface with the warm amber accent instead of green. */
+:root[data-theme="amber-light"] {
+  --bg-app: #dedcd4;
+  --panel: #f8f7f3;
+  --panel-art: #ffffff;
+  --border: #c7c4b9;
+  --ink: #201f1b;
+  --dim: #726f63;
+  --beacon: #c98a1f;
+  --beacon-shade: #96660f;
+  --beacon-ink: #1a1408;
+  --danger: #a23030;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
     --tab-motion: 0ms;
+    --modal-motion: 0ms;
+    --screen-motion: 0ms;
+    --backdrop-motion: 0ms;
   }
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* ---------- scrollbar ----------
+   Built from the same tokens every theme already overrides (see above), so this one rule matches
+   all four themes instead of needing a copy per theme. `scrollbar-width`/`scrollbar-color` cover
+   Firefox-style engines; `::-webkit-scrollbar-*` covers the WebView2/Chromium engine this app
+   actually ships on. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--dim);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 html,
@@ -53,6 +147,7 @@ button {
 }
 
 .app {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -65,7 +160,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 36px;
+  height: var(--titlebar-height);
   flex-shrink: 0;
   background: var(--bg-app);
   border-bottom: 1px solid var(--border);
@@ -117,22 +212,38 @@ button {
   width: 100vw;
 }
 
-/* ---------- accounts screen (fullscreen, replaces the shell while open) ---------- */
+/* ---------- fullscreen screens (accounts / settings / instance detail) ----------
+   All three overlay the shell (rather than replacing it in flex flow) so open AND close can
+   both slide -- a plain display:none/flex swap can't be transitioned. Closed: pushed off to the
+   right and made non-interactive; `visibility` flips to hidden only *after* the slide-out
+   finishes (the delayed transition below), so it doesn't vanish mid-slide. */
 
-.app.is-managing-accounts .shell {
-  display: none;
-}
-
-.app.is-managing-accounts .accounts-screen {
+.screen-overlay {
+  position: absolute;
+  top: var(--titlebar-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
-}
-
-.accounts-screen {
-  display: none;
-  flex: 1;
-  min-height: 0;
   flex-direction: column;
   background: var(--panel);
+  transform: translateX(100%);
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform var(--screen-motion) ease-out, visibility 0s linear var(--screen-motion);
+}
+
+.screen-overlay.is-open {
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform var(--screen-motion) ease-out, visibility 0s linear 0s;
+}
+
+/* The shell sits underneath every overlay above -- keep it out of tab/click reach while one is
+   open instead of layering invisible controls behind an opaque panel. */
+.app:has(.screen-overlay.is-open) .shell {
+  pointer-events: none;
 }
 
 .accounts-screen__header {
@@ -177,6 +288,509 @@ button {
 .accounts-screen__actions {
   display: flex;
   gap: 12px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+}
+
+.settings-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-row__label {
+  font-weight: 600;
+}
+
+.settings-row__hint {
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.settings-row--path {
+  align-items: flex-start;
+}
+
+.settings-row--danger {
+  border-color: var(--danger);
+}
+
+.settings-row--danger .modal__btn {
+  flex: none;
+  padding: 10px 20px;
+}
+
+.settings-row__path {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  /* Wrap points come from the `<wbr>`s `setPathText()` inserts after each path separator
+     (see main.ts) -- `anywhere` is only the last-resort fallback for a single path segment
+     that's long enough to overflow on its own, not the primary wrapping strategy. */
+  overflow-wrap: anywhere;
+}
+
+.settings-row__path-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-row__path-actions .modal__btn {
+  flex: none;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.toggle {
+  flex-shrink: 0;
+  min-width: 64px;
+  padding: 10px 0;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.toggle:hover {
+  background: var(--bg-app);
+}
+
+.toggle.is-on {
+  background: var(--beacon);
+  border-color: var(--beacon-shade);
+  color: var(--beacon-ink);
+}
+
+.range {
+  flex-shrink: 0;
+  width: 160px;
+  accent-color: var(--beacon);
+}
+
+.range:disabled {
+  opacity: 0.4;
+}
+
+/* ---------- theme picker ---------- */
+
+.settings-row--themes {
+  flex-wrap: wrap;
+}
+
+.theme-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+
+.theme-option:hover {
+  background: var(--bg-app);
+}
+
+.theme-option.is-selected {
+  border-color: var(--beacon);
+  color: var(--ink);
+}
+
+.theme-option__swatch {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+}
+
+.theme-option__swatch::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 12px;
+  height: 12px;
+}
+
+.theme-option__label {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.theme-option[data-theme="beacon"] .theme-option__swatch {
+  background: #141414;
+}
+.theme-option[data-theme="beacon"] .theme-option__swatch::after {
+  background: #399e4d;
+}
+
+.theme-option[data-theme="amber"] .theme-option__swatch {
+  background: #141414;
+}
+.theme-option[data-theme="amber"] .theme-option__swatch::after {
+  background: #e3a73a;
+}
+
+.theme-option[data-theme="light"] .theme-option__swatch {
+  background: #f8f7f3;
+}
+.theme-option[data-theme="light"] .theme-option__swatch::after {
+  background: #2b7a3d;
+}
+
+.theme-option[data-theme="amber-light"] .theme-option__swatch {
+  background: #f8f7f3;
+}
+.theme-option[data-theme="amber-light"] .theme-option__swatch::after {
+  background: #c98a1f;
+}
+
+.instance-detail__top {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.instance-detail__icon {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  /* Explicitly transparent, not `var(--border)` -- and not omitted, since this is a `<button>`
+     and browsers give buttons an opaque default background (`buttonface`) that would otherwise
+     show through as a plain white square when there's no icon to display. A filled square with
+     nothing in it reads as a broken/placeholder image rather than "click here to set one"; the
+     hover border below is the only hint this is clickable until an icon is actually set. */
+  background-color: transparent;
+  background-size: cover;
+  image-rendering: pixelated;
+  border: 1px solid transparent;
+}
+
+.instance-detail__icon:hover {
+  border-color: var(--ink);
+}
+
+.instance-detail__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.instance-detail__name {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.instance-detail__version {
+  font-family: var(--font-mono);
+  color: var(--dim);
+}
+
+.instance-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.instance-detail__actions .modal__btn {
+  flex: none;
+  padding: 10px 18px;
+}
+
+.content-section__title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.content-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.content-section__header .content-section__title {
+  margin: 0;
+}
+
+.content-section__header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.content-section__header .modal__btn,
+.content-section__header-actions .modal__btn {
+  flex: none;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+/* ---------- installations tab: instance grid ---------- */
+
+.instances-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.instances-view__toolbar {
+  display: flex;
+  gap: 12px;
+}
+
+.instances-view__toolbar .modal__btn {
+  flex: none;
+  padding: 12px 24px;
+}
+
+.instance-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.instance-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 12px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  text-align: center;
+}
+
+.instance-card:hover {
+  background: var(--bg-app);
+}
+
+.instance-card__icon {
+  width: 56px;
+  height: 56px;
+  background-size: cover;
+  image-rendering: pixelated;
+}
+
+.instance-card__name {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.instance-card__version {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* ---------- instance detail: screenshots ---------- */
+
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.screenshot-card {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background-color: var(--bg-app);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--border);
+}
+
+.screenshot-card.is-pinned {
+  border-color: var(--beacon);
+}
+
+.screenshot-card__btn {
+  position: absolute;
+  top: 6px;
+  width: 26px;
+  height: 26px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.screenshot-card__btn:hover {
+  background: var(--panel);
+}
+
+.screenshot-card__pin {
+  left: 6px;
+}
+
+.screenshot-card.is-pinned .screenshot-card__pin {
+  border-color: var(--beacon);
+  color: var(--beacon);
+}
+
+.screenshot-card__remove {
+  right: 6px;
+  color: var(--danger);
+}
+
+/* ---------- skins tab ---------- */
+
+.skins-signin {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+}
+
+/* `[hidden]` and this rule's own `display: flex` are equal-specificity selectors -- without this
+   the later one in the cascade would win and the `hidden` attribute would do nothing (same
+   gotcha already hit once this session on `.progress`). */
+.skins-signin[hidden] {
+  display: none;
+}
+
+.skins-view {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.skins-content {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.skins-preview {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.skin-viewer {
+  background: var(--panel-art);
+  border: 1px solid var(--border);
+}
+
+.skin-variant {
+  display: flex;
+  gap: 8px;
+}
+
+.skin-variant__option {
+  flex: 1;
+  padding: 8px 18px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.skin-variant__option:hover {
+  background: var(--bg-app);
+}
+
+.skin-variant__option.is-selected {
+  border-color: var(--beacon);
+  color: var(--ink);
+}
+
+.skins-preview__actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.skins-preview__actions .modal__btn {
+  flex: 1;
+}
+
+.skins-capes {
+  flex: 1;
+  min-width: 0;
+}
+
+.cape-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.cape-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  text-align: center;
+}
+
+.cape-card:hover {
+  background: var(--bg-app);
+}
+
+.cape-card.is-active {
+  border-color: var(--beacon);
+}
+
+.cape-card__thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  background-color: var(--panel-art);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+}
+
+.cape-card__name {
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* ---------- sidebar ---------- */
@@ -377,7 +991,10 @@ button {
 .nav-row__icon--game {
   width: 48px;
   height: 48px;
-  background: var(--border);
+  background-color: var(--border);
+  background-image: url("./assets/icons/grass_block.png");
+  background-size: cover;
+  image-rendering: pixelated;
 }
 
 .nav-row__title {
@@ -473,15 +1090,66 @@ button {
   color: var(--dim);
 }
 
+/* Instance names in the instance picker's dropdown reuse `.version-row`'s layout (space-between,
+   bordered rows) but are prose, not version codes -- unlike `.version-row__id` they must not
+   inherit the monospace font meant for things like "1.21.4". */
+.version-row__title {
+  font-weight: 600;
+}
+
 .hero {
+  position: relative;
   height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
   background: var(--panel-art);
   border: 1px solid var(--border);
+}
+
+.hero__backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.hero__backdrop-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity var(--backdrop-motion);
+  filter: blur(var(--screenshot-blur));
+  /* Blurring a hard-edged image reveals its own border -- scale up a hair so the blurred edge
+     sits outside the visible frame instead of showing as a lighter band around it. */
+  transform: scale(1.05);
+}
+
+.hero__backdrop-layer.is-active {
+  opacity: 1;
+}
+
+.hero__backdrop-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, var(--bg-app) 0%, transparent 35%);
+}
+
+.hero__placeholder {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  transition: opacity var(--tab-motion);
+}
+
+.hero.has-backdrop .hero__placeholder {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .hero__mark {
@@ -517,58 +1185,129 @@ button {
 
 .playbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  padding: 24px 40px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 40px;
   border-top: 1px solid var(--border);
   background: var(--bg-app);
 }
 
-.playbar__version-icon {
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  background: var(--border);
+.playbar__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
 }
 
-/* ---------- version picker ---------- */
+/* ---------- install/download progress ----------
+   A dedicated bar above the play controls, the way the vanilla launcher shows "Downloading
+   Libraries"/"Downloading Assets" above its own Play button, instead of the button itself
+   filling up like a loading spinner glued to its label. */
 
-.version-picker {
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* `[hidden]` and `.progress`'s own `display: flex` are equal-specificity class/attribute
+   selectors -- without this, the later one in the cascade (`.progress`) would win and the
+   `hidden` attribute would do nothing. */
+.progress[hidden] {
+  display: none;
+}
+
+.progress__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.progress__label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.progress__percent {
+  font-family: var(--font-mono);
+  color: var(--dim);
+}
+
+.progress__track {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress__fill {
+  height: 100%;
+  width: 0%;
+  background: var(--beacon);
+  border-radius: 4px;
+  transition: width 200ms ease-out;
+}
+
+/* ---------- instance picker ---------- */
+
+.instance-picker {
   position: relative;
   flex-shrink: 0;
 }
 
-.version-picker__trigger {
+.instance-picker__trigger {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  height: var(--playbar-control-height);
   background: none;
   border: 1px solid var(--border);
-  padding: 12px 18px;
+  padding: 0 18px;
   color: var(--ink);
 }
 
-.version-picker__trigger:hover {
+.instance-picker__trigger:hover {
   background: var(--panel);
 }
 
-.version-picker__trigger:disabled {
+.instance-picker__trigger:disabled {
   color: var(--dim);
   cursor: default;
 }
 
-.version-picker__id {
-  font-family: var(--font-mono);
-  font-size: 18px;
+.instance-picker__icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  background-size: cover;
+  image-rendering: pixelated;
 }
 
-.version-picker__chevron {
+.instance-picker__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.instance-picker__name {
+  font-weight: 600;
+}
+
+.instance-picker__version {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.instance-picker__chevron {
   color: var(--dim);
   font-size: 11px;
 }
 
-.version-picker__list {
+.instance-picker__list {
   display: none;
   position: absolute;
   bottom: calc(100% + 8px);
@@ -580,43 +1319,50 @@ button {
   border: 1px solid var(--border);
 }
 
-.version-picker.is-open .version-picker__list {
+.instance-picker.is-open .instance-picker__list {
   display: block;
+}
+
+/* Reused inside the create-instance / change-version modals -- same row look as the picker's
+   dropdown above, just laid out as normal block content instead of an absolutely-positioned
+   popover. */
+.version-select-list {
+  width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
 }
 
 .play {
   position: relative;
   flex: 1;
-  background: var(--beacon-shade);
+  height: var(--playbar-control-height);
+  background: var(--beacon);
   border: none;
-  padding: 26px 0;
-  overflow: hidden;
+  padding: 0;
 }
 
-.play:active .play__fill {
+.play:active {
   background: var(--beacon-shade);
 }
 
 .play:disabled {
   cursor: default;
-}
-
-/* Install progress fill -- width is set directly by JS per `install-progress` event, with no
-   transition, so it jumps in step with the actual file count instead of faking smoothness. */
-.play__fill {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  background: var(--beacon);
+  background: var(--beacon-shade);
+  color: var(--dim);
 }
 
 .play__label {
   position: relative;
-  color: #f4f2ec;
+  color: var(--beacon-ink);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.play:disabled .play__label {
+  color: var(--dim);
 }
 
 /* ---------- launch error ---------- */
@@ -625,23 +1371,39 @@ button {
   margin: 0;
   padding: 12px 40px;
   background: var(--danger);
-  color: #f4f2ec;
+  color: var(--beacon-ink);
   font-size: 13px;
 }
 
 /* ---------- sign-in modal ---------- */
 
+/* Same bidirectional technique as .screen-overlay: always display:flex, actual show/hide is
+   opacity + visibility, so both open AND close can animate instead of just open (a plain
+   display:none/flex swap can only ever pop). visibility flips to hidden only after the fade-out
+   finishes, so it doesn't vanish mid-close and stays out of tab order while closed. */
 .modal {
-  display: none;
+  display: flex;
+  /* Fixed, but only below the titlebar -- inset:0 used to cover our own window controls
+     (minimize/maximize/close) whenever a modal was open. */
   position: fixed;
-  inset: 0;
+  top: var(--titlebar-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--modal-motion) ease-out, visibility 0s linear var(--modal-motion);
 }
 
 .modal.is-open {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity var(--modal-motion) ease-out, visibility 0s linear 0s;
 }
 
 .modal__panel {
@@ -654,6 +1416,12 @@ button {
   background: var(--panel);
   border: 1px solid var(--border);
   text-align: center;
+  transform: translateY(-48px);
+  transition: transform var(--modal-motion) ease-out;
+}
+
+.modal.is-open .modal__panel {
+  transform: translateY(0);
 }
 
 .modal__eyebrow {
@@ -698,14 +1466,41 @@ button {
   background: var(--bg-app);
 }
 
+.modal__btn:disabled {
+  color: var(--dim);
+  cursor: default;
+}
+
+.modal__btn:disabled:hover {
+  background: none;
+}
+
 .modal__btn--primary {
   background: var(--beacon);
   border-color: var(--beacon-shade);
-  color: #f4f2ec;
+  color: var(--beacon-ink);
 }
 
 .modal__btn--primary:hover {
   background: var(--beacon);
+}
+
+.modal__btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.modal__btn--danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--beacon-ink);
+}
+
+.modal__panel--wide {
+  width: 480px;
+  max-width: calc(100vw - 80px);
+  align-items: stretch;
+  text-align: left;
 }
 
 .modal__input {
@@ -747,6 +1542,12 @@ button {
 
 .manage-row:last-child {
   border-bottom: none;
+}
+
+/* A datapack row nested under its world -- indented to read as "belongs to the row above". */
+.manage-row--nested {
+  padding-left: 40px;
+  background: var(--bg-app);
 }
 
 .manage-row__info {
@@ -801,7 +1602,7 @@ button {
 
 .manage-row__btn--danger:hover {
   background: var(--danger);
-  color: #f4f2ec;
+  color: var(--beacon-ink);
   border-color: var(--danger);
 }
 

@@ -10,19 +10,24 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "title": "Beacon",
-        "width": 800,
-        "height": 600,
+        "width": 1100,
+        "height": 720,
         "minWidth": 720,
         "minHeight": 480,
-        "decorations": false
+        "decorations": false,
+        "visible": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: https://textures.minecraft.net http://textures.minecraft.net; style-src 'self' 'unsafe-inline'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
   "bundle": {

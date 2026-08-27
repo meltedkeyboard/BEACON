@@ -4,19 +4,23 @@ pub mod auth;
 pub mod config;
 pub mod downloader;
 pub mod error;
+pub mod instance;
 pub mod launcher;
 pub mod libraries;
 pub mod login;
 pub mod manifest;
 pub mod rules;
 pub mod secret_store;
+pub mod skins;
 
 pub use account::{offline_account, Account};
 pub use config::LauncherConfig;
 pub use error::{CoreError, Result};
+pub use instance::{Instance, ModInfo, ScreenshotInfo, WorldInfo};
 pub use launcher::{install_version, launch, LaunchOptions};
 pub use login::{forget_account, login_with_device_code, refresh_session};
 pub use manifest::{fetch_version_manifest, VersionEntry, VersionManifest};
+pub use skins::{CapeInfo, MinecraftProfile, SkinInfo};
 
 /// The HTTP client every caller (CLI and Tauri alike) should build once and reuse for every
 /// Mojang/Xbox Live/Minecraft Services request. Plain `reqwest::Client::new()` has no timeout at

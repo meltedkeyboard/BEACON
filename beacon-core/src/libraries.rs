@@ -96,6 +96,11 @@ pub fn resolve(
                 let dest = libraries_dir.join(rel_path);
                 if matches!(native_classifier, NativeClassifier::Matching) {
                     native_archives.push(dest.clone());
+                    // Also on the classpath: the newest native bootstrap (see `extract_natives`)
+                    // has the client jar locate its own native jars via the classpath rather than
+                    // a pre-extracted flat directory. Harmless for every older version too --
+                    // a `natives-*` classifier jar carries no `.class` files to collide with.
+                    classpath.push(dest.clone());
                 } else {
                     classpath.push(dest.clone());
                 }
@@ -118,6 +123,7 @@ pub fn resolve(
                             .unwrap_or_else(|| maven_path(&library.name, Some(&classifier_key)));
                         let dest = libraries_dir.join(rel_path);
                         native_archives.push(dest.clone());
+                        classpath.push(dest.clone());
                         download_tasks.push(DownloadTask {
                             url: artifact.url.clone(),
                             dest,
@@ -149,13 +155,42 @@ pub fn resolve(
     }
 }
 
-/// Extracts every non-`META-INF` entry from each native archive into `natives_dir`.
+/// Which of the newest native bootstrap's four fixed subdirectories (`natives_dir/java`,
+/// `/jna`, `/lwjgl`, `/netty` -- see the `-Djava.library.path=${natives_directory}/java` etc.
+/// JVM argument templates on versions that use it) a native archive's own binaries belong under,
+/// inferred from the Maven group path segments already baked into `archive_path` (e.g.
+/// `.../org/lwjgl/lwjgl/3.4.3/...`). Defaults to `"java"` for anything that isn't LWJGL/JNA/Netty
+/// -- there's no fifth bucket for "everything else" in the argument list, and `java` is the
+/// generic JVM-native-library-path one.
+fn native_bootstrap_subdir(archive_path: &Path) -> &'static str {
+    let path = archive_path.to_string_lossy().replace('\\', "/");
+    if path.contains("/org/lwjgl/") {
+        "lwjgl"
+    } else if path.contains("/net/java/dev/jna/") {
+        "jna"
+    } else if path.contains("/io/netty/") {
+        "netty"
+    } else {
+        "java"
+    }
+}
+
+/// Extracts every non-`META-INF` entry from each native archive into `natives_dir` -- both
+/// directly in it (the flat layout every version up to this one expects, via
+/// `-Djava.library.path=${natives_directory}`) and under whichever of `java`/`jna`/`lwjgl`/`netty`
+/// subdirectory matches the archive's own library (see [`native_bootstrap_subdir`]), since the
+/// very newest versions instead point each of those four JVM properties at its own subfolder.
+/// Duplicating a handful of small native binaries across both layouts is far cheaper than trying
+/// to detect which convention a given version actually needs.
 pub fn extract_natives(native_archives: &[PathBuf], natives_dir: &Path) -> crate::error::Result<()> {
     use crate::error::io_err;
 
     std::fs::create_dir_all(natives_dir).map_err(io_err(natives_dir))?;
 
     for archive_path in native_archives {
+        let subdir = natives_dir.join(native_bootstrap_subdir(archive_path));
+        std::fs::create_dir_all(&subdir).map_err(io_err(&subdir))?;
+
         let file = std::fs::File::open(archive_path).map_err(io_err(archive_path))?;
         let mut archive = zip::ZipArchive::new(file)?;
 
@@ -168,9 +203,13 @@ pub fn extract_natives(native_archives: &[PathBuf], natives_dir: &Path) -> crate
             let Some(file_name) = Path::new(&name).file_name() else {
                 continue;
             };
-            let out_path = natives_dir.join(file_name);
-            let mut out_file = std::fs::File::create(&out_path).map_err(io_err(&out_path))?;
-            std::io::copy(&mut entry, &mut out_file).map_err(io_err(&out_path))?;
+
+            let mut bytes = Vec::new();
+            std::io::copy(&mut entry, &mut bytes).map_err(io_err(archive_path))?;
+
+            for out_path in [natives_dir.join(file_name), subdir.join(file_name)] {
+                std::fs::write(&out_path, &bytes).map_err(io_err(&out_path))?;
+            }
         }
     }
     Ok(())

@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script src="/src/theme-init.js"></script>
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Beacon</title>
@@ -71,7 +72,7 @@
             <span class="nav-row__icon" aria-hidden="true">&#128100;</span>
             <span class="nav-row__label">Accounts</span>
           </button>
-          <button class="nav-row" type="button" data-nav="settings">
+          <button class="nav-row" type="button" id="settings-nav" data-nav="settings">
             <span class="nav-row__icon" aria-hidden="true">&#9881;</span>
             <span class="nav-row__label">Settings</span>
           </button>
@@ -90,21 +91,58 @@
 
         <div class="panel__body">
           <section class="tab-panel is-active" data-tab-panel="play">
-            <div class="hero">
-              <span class="hero__mark" aria-hidden="true">
-                <span class="hero__mark-beam"></span>
-                <span class="hero__mark-base"></span>
-              </span>
-              <p class="hero__wordmark">Beacon</p>
+            <div class="hero" id="hero">
+              <div class="hero__backdrop" aria-hidden="true">
+                <div class="hero__backdrop-layer" id="hero-backdrop-a"></div>
+                <div class="hero__backdrop-layer" id="hero-backdrop-b"></div>
+                <div class="hero__backdrop-scrim"></div>
+              </div>
+              <div class="hero__placeholder">
+                <span class="hero__mark" aria-hidden="true">
+                  <span class="hero__mark-beam"></span>
+                  <span class="hero__mark-base"></span>
+                </span>
+                <p class="hero__wordmark">Beacon</p>
+              </div>
             </div>
           </section>
 
           <section class="tab-panel" data-tab-panel="installations">
-            <p class="placeholder-text">Installed versions will list here.</p>
+            <div class="instances-view">
+              <div class="instances-view__toolbar">
+                <button class="modal__btn modal__btn--primary" type="button" id="new-instance-btn">New instance</button>
+                <button class="modal__btn" type="button" id="import-instance-btn">Import</button>
+              </div>
+              <div class="instance-grid" id="instance-grid"></div>
+            </div>
           </section>
 
           <section class="tab-panel" data-tab-panel="skins">
-            <p class="placeholder-text">Skin management will live here.</p>
+            <div class="skins-signin" id="skins-signin" hidden>
+              <p class="modal__body">Sign in with a Microsoft account to manage skins and capes.</p>
+              <button class="modal__btn modal__btn--primary" type="button" id="skins-signin-btn">Sign in with Microsoft</button>
+            </div>
+
+            <div class="skins-view" id="skins-view">
+              <div class="skins-content">
+                <div class="skins-preview">
+                  <canvas class="skin-viewer" id="skin-viewer-canvas" width="280" height="380"></canvas>
+                  <div class="skin-variant" id="skin-variant" role="radiogroup" aria-label="Skin model">
+                    <button class="skin-variant__option" type="button" data-variant="classic" role="radio" aria-checked="false">Classic</button>
+                    <button class="skin-variant__option" type="button" data-variant="slim" role="radio" aria-checked="false">Slim</button>
+                  </div>
+                  <div class="skins-preview__actions">
+                    <button class="modal__btn modal__btn--primary" type="button" id="skin-upload-btn">Upload skin&hellip;</button>
+                    <button class="modal__btn" type="button" id="skin-reset-btn">Reset to default</button>
+                  </div>
+                </div>
+
+                <section class="skins-capes">
+                  <p class="content-section__title">Capes</p>
+                  <div class="cape-grid" id="cape-grid"></div>
+                </section>
+              </div>
+            </div>
           </section>
 
           <section class="tab-panel" data-tab-panel="notes">
@@ -115,26 +153,40 @@
         <p class="launch-error" id="launch-error" hidden></p>
 
         <footer class="playbar">
-          <div class="version-picker" id="version-picker">
-            <button class="version-picker__trigger" type="button" id="version-picker-trigger">
-              <span class="playbar__version-icon" aria-hidden="true"></span>
-              <span class="version-picker__id" id="playbar-version">&mdash;</span>
-              <span class="version-picker__chevron" aria-hidden="true">&#9652;</span>
-            </button>
-            <div class="version-picker__list" id="version-picker-list"></div>
+          <div class="progress" id="progress-panel" hidden>
+            <div class="progress__row">
+              <span class="progress__label" id="progress-label">Installing&hellip;</span>
+              <span class="progress__percent" id="progress-percent">0%</span>
+            </div>
+            <div class="progress__track">
+              <div class="progress__fill" id="progress-fill"></div>
+            </div>
           </div>
 
-          <button class="play" type="button" id="play-button">
-            <span class="play__fill" id="play-fill"></span>
-            <span class="play__label" id="play-label">Play</span>
-          </button>
+          <div class="playbar__controls">
+            <div class="instance-picker" id="instance-picker">
+              <button class="instance-picker__trigger" type="button" id="instance-picker-trigger">
+                <span class="instance-picker__icon" id="instance-picker-icon" aria-hidden="true"></span>
+                <span class="instance-picker__text">
+                  <span class="instance-picker__name" id="playbar-instance-name">No instances</span>
+                  <span class="instance-picker__version" id="playbar-instance-version">&mdash;</span>
+                </span>
+                <span class="instance-picker__chevron" aria-hidden="true">&#9652;</span>
+              </button>
+              <div class="instance-picker__list" id="instance-picker-list"></div>
+            </div>
 
-          <span class="playbar__user" id="playbar-user">Not signed in</span>
+            <button class="play" type="button" id="play-button">
+              <span class="play__label" id="play-label">Play</span>
+            </button>
+
+            <span class="playbar__user" id="playbar-user">Not signed in</span>
+          </div>
         </footer>
       </main>
       </div>
 
-      <div class="accounts-screen" id="accounts-screen">
+      <div class="accounts-screen screen-overlay" id="accounts-screen">
         <header class="accounts-screen__header">
           <button class="accounts-screen__back" type="button" id="accounts-back">&#8592; Back</button>
           <p class="accounts-screen__title">Accounts</p>
@@ -146,6 +198,208 @@
             <button class="modal__btn" type="button" id="manage-add-offline">Add offline</button>
             <button class="modal__btn modal__btn--primary" type="button" id="manage-add-microsoft">Add Microsoft</button>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-screen screen-overlay" id="settings-screen">
+        <header class="accounts-screen__header">
+          <button class="accounts-screen__back" type="button" id="settings-back">&#8592; Back</button>
+          <p class="accounts-screen__title">Settings</p>
+        </header>
+        <div class="accounts-screen__body">
+          <div class="settings-row settings-row--themes">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Theme</span>
+              <span class="settings-row__hint">Pick a color scheme.</span>
+            </div>
+            <div class="theme-picker" id="theme-picker" role="radiogroup" aria-label="Theme">
+              <button class="theme-option" type="button" data-theme="beacon" role="radio" aria-checked="false">
+                <span class="theme-option__swatch" aria-hidden="true"></span>
+                <span class="theme-option__label">Dark · Green</span>
+              </button>
+              <button class="theme-option" type="button" data-theme="amber" role="radio" aria-checked="false">
+                <span class="theme-option__swatch" aria-hidden="true"></span>
+                <span class="theme-option__label">Dark · Amber</span>
+              </button>
+              <button class="theme-option" type="button" data-theme="light" role="radio" aria-checked="false">
+                <span class="theme-option__swatch" aria-hidden="true"></span>
+                <span class="theme-option__label">Light · Green</span>
+              </button>
+              <button class="theme-option" type="button" data-theme="amber-light" role="radio" aria-checked="false">
+                <span class="theme-option__swatch" aria-hidden="true"></span>
+                <span class="theme-option__label">Light · Amber</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Show snapshots and old versions</span>
+              <span class="settings-row__hint">Include snapshots, old betas and alphas in the version list.</span>
+            </div>
+            <button class="toggle" type="button" id="snapshots-toggle" role="switch" aria-checked="false">
+              <span id="snapshots-toggle-label">Off</span>
+            </button>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Play tab background</span>
+              <span class="settings-row__hint">Show the selected instance's own screenshots behind the Play tab.</span>
+            </div>
+            <button class="toggle" type="button" id="screenshots-bg-toggle" role="switch" aria-checked="true">
+              <span id="screenshots-bg-toggle-label">On</span>
+            </button>
+          </div>
+
+          <div class="settings-row" id="screenshots-bg-blur-row">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Background blur</span>
+              <span class="settings-row__hint">How much to blur the Play tab's screenshot background.</span>
+            </div>
+            <input class="range" type="range" id="screenshots-bg-blur" min="0" max="20" step="1" />
+          </div>
+
+          <div class="settings-row settings-row--path">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Game data</span>
+              <span class="settings-row__hint">Downloaded versions, libraries and assets. Shared by every instance.</span>
+              <span class="settings-row__path" id="game-dir-path">&mdash;</span>
+            </div>
+            <div class="settings-row__path-actions">
+              <button class="modal__btn" type="button" id="game-dir-open">Open</button>
+              <button class="modal__btn" type="button" id="game-dir-browse">Browse&hellip;</button>
+            </div>
+          </div>
+
+          <div class="settings-row settings-row--path">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Instances</span>
+              <span class="settings-row__hint">Each instance's own saves, resource packs, shader packs and config.</span>
+              <span class="settings-row__path" id="instances-dir-path">&mdash;</span>
+            </div>
+            <div class="settings-row__path-actions">
+              <button class="modal__btn" type="button" id="instances-dir-open">Open</button>
+              <button class="modal__btn" type="button" id="instances-dir-browse">Browse&hellip;</button>
+            </div>
+          </div>
+
+          <div class="settings-row settings-row--path">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Launcher config</span>
+              <span class="settings-row__hint">Accounts, instance list and these settings. Not relocatable from here.</span>
+              <span class="settings-row__path" id="config-dir-path">&mdash;</span>
+            </div>
+            <div class="settings-row__path-actions">
+              <button class="modal__btn" type="button" id="config-dir-open">Open</button>
+            </div>
+          </div>
+
+          <div class="settings-row settings-row--danger">
+            <div class="settings-row__info">
+              <span class="settings-row__label">Wipe all data</span>
+              <span class="settings-row__hint">Deletes every account, instance, world and downloaded file, then closes Beacon. Can't be undone.</span>
+            </div>
+            <button class="modal__btn modal__btn--danger" type="button" id="wipe-all-btn">Wipe everything</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="instance-screen screen-overlay" id="instance-screen">
+        <header class="accounts-screen__header">
+          <button class="accounts-screen__back" type="button" id="instance-back">&#8592; Back</button>
+          <p class="accounts-screen__title" id="instance-screen-title">Instance</p>
+        </header>
+        <div class="accounts-screen__body">
+          <div class="instance-detail__top">
+            <button class="instance-detail__icon" type="button" id="instance-icon-btn" aria-label="Change icon"></button>
+            <div class="instance-detail__info">
+              <span class="instance-detail__name" id="instance-detail-name">&mdash;</span>
+              <span class="instance-detail__version" id="instance-detail-version">&mdash;</span>
+            </div>
+          </div>
+
+          <div class="instance-detail__actions">
+            <button class="modal__btn" type="button" id="instance-rename-btn">Rename</button>
+            <button class="modal__btn" type="button" id="instance-icon-clear-btn">Clear icon</button>
+            <button class="modal__btn" type="button" id="instance-open-folder-btn">Open .minecraft</button>
+            <button class="modal__btn" type="button" id="instance-libraries-open-btn">Open libraries</button>
+            <button class="modal__btn" type="button" id="instance-export-btn">Export</button>
+            <button class="modal__btn modal__btn--danger" type="button" id="instance-delete-btn">Delete</button>
+          </div>
+
+          <section>
+            <p class="content-section__title">Version</p>
+            <div class="manage-list">
+              <div class="manage-row">
+                <div class="manage-row__info">
+                  <span class="manage-row__name" id="instance-version-name">Minecraft &mdash;</span>
+                </div>
+                <button class="manage-row__btn" type="button" id="instance-version-btn">Change version</button>
+              </div>
+              <div class="manage-row">
+                <div class="manage-row__info">
+                  <span class="manage-row__name">Mod Loader &mdash; None</span>
+                </div>
+                <button class="manage-row__btn" type="button" disabled title="Not implemented yet">Install&hellip;</button>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <div class="content-section__header">
+              <p class="content-section__title">Mods</p>
+              <div class="content-section__header-actions">
+                <button class="modal__btn" type="button" id="mods-open-folder-btn">Open folder</button>
+                <button class="modal__btn modal__btn--primary" type="button" id="mods-add-btn">Add mod</button>
+              </div>
+            </div>
+            <div class="manage-list" id="mods-list"></div>
+          </section>
+
+          <section>
+            <div class="content-section__header">
+              <p class="content-section__title">Worlds</p>
+              <button class="modal__btn" type="button" id="worlds-open-folder-btn">Open folder</button>
+            </div>
+            <div class="manage-list" id="worlds-list"></div>
+          </section>
+
+          <section>
+            <div class="content-section__header">
+              <p class="content-section__title">Resource Packs</p>
+              <button class="modal__btn" type="button" id="resource-packs-open-folder-btn">Open folder</button>
+            </div>
+            <div class="manage-list" id="resource-packs-list"></div>
+          </section>
+
+          <section>
+            <div class="content-section__header">
+              <p class="content-section__title">Shader Packs</p>
+              <button class="modal__btn" type="button" id="shader-packs-open-folder-btn">Open folder</button>
+            </div>
+            <div class="manage-list" id="shader-packs-list"></div>
+          </section>
+
+          <section>
+            <div class="content-section__header">
+              <p class="content-section__title">Screenshots</p>
+              <button class="modal__btn" type="button" id="screenshots-open-folder-btn">Open folder</button>
+            </div>
+            <div class="screenshot-grid" id="screenshots-grid"></div>
+          </section>
+
+          <section>
+            <p class="content-section__title">Advanced</p>
+            <p class="modal__body">Low-level jar patching, MultiMC-style. Not implemented yet.</p>
+            <div class="instance-detail__actions">
+              <button class="modal__btn" type="button" disabled title="Not implemented yet">Add mod to jar-file Minecraft</button>
+              <button class="modal__btn" type="button" disabled title="Not implemented yet">Replace Minecraft.jar</button>
+              <button class="modal__btn" type="button" disabled title="Not implemented yet">Add agents</button>
+              <button class="modal__btn" type="button" disabled title="Not implemented yet">Add empty file</button>
+              <button class="modal__btn" type="button" disabled title="Not implemented yet">Import components</button>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -180,6 +434,64 @@
           <div class="modal__actions">
             <button class="modal__btn modal__btn--primary" type="button" id="offline-confirm">Add</button>
             <button class="modal__btn" type="button" id="offline-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="create-instance-modal">
+        <div class="modal__panel modal__panel--wide">
+          <p class="modal__eyebrow">New instance</p>
+          <input class="modal__input" type="text" id="create-instance-name" placeholder="Instance name" autocomplete="off" />
+          <div class="version-select-list" id="create-instance-versions"></div>
+          <p class="modal__error" id="create-instance-error" hidden></p>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="create-instance-confirm">Create</button>
+            <button class="modal__btn" type="button" id="create-instance-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="change-version-modal">
+        <div class="modal__panel modal__panel--wide">
+          <p class="modal__eyebrow">Change version</p>
+          <div class="version-select-list" id="change-version-versions"></div>
+          <div class="modal__actions">
+            <button class="modal__btn" type="button" id="change-version-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="rename-instance-modal">
+        <div class="modal__panel">
+          <p class="modal__eyebrow">Rename instance</p>
+          <input class="modal__input" type="text" id="rename-instance-input" autocomplete="off" />
+          <p class="modal__error" id="rename-instance-error" hidden></p>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--primary" type="button" id="rename-instance-confirm">Rename</button>
+            <button class="modal__btn" type="button" id="rename-instance-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="delete-instance-modal">
+        <div class="modal__panel">
+          <p class="modal__eyebrow" id="delete-instance-eyebrow">Delete instance?</p>
+          <p class="modal__body" id="delete-instance-message">This permanently deletes its worlds and everything else in its folder. This can't be undone.</p>
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--danger" type="button" id="delete-instance-confirm">Delete</button>
+            <button class="modal__btn" type="button" id="delete-instance-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="wipe-modal">
+        <div class="modal__panel">
+          <p class="modal__eyebrow">Wipe all data?</p>
+          <p class="modal__body">This permanently deletes every account, instance, world and downloaded file, then closes Beacon. This can't be undone. If a game is currently running, close it first.</p>
+          <input class="modal__input" type="text" id="wipe-confirm-input" placeholder="Type WIPE to confirm" autocomplete="off" />
+          <div class="modal__actions">
+            <button class="modal__btn modal__btn--danger" type="button" id="wipe-confirm-btn" disabled>Wipe everything</button>
+            <button class="modal__btn" type="button" id="wipe-cancel-btn">Cancel</button>
           </div>
         </div>
       </div>

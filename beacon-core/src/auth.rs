@@ -246,7 +246,7 @@ fn xsts_error_message(x_err: u64) -> String {
 /// Reads the response as JSON on success, or as an `Auth` error carrying the status and response
 /// body on failure -- `error_for_status()` alone discards the body, which is where Xbox
 /// Live/Minecraft Services APIs put the actually useful error detail.
-async fn json_or_error<T: serde::de::DeserializeOwned>(
+pub(crate) async fn json_or_error<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
     step: &str,
 ) -> Result<T> {
