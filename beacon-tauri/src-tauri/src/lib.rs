@@ -4,7 +4,7 @@ mod state;
 use beacon_core::config::{default_config_path, LauncherConfig};
 use tauri::Manager;
 
-use commands::{accounts, instances, launch, mod_browser, modloader, settings, skins};
+use commands::{accounts, content_browser, instances, launch, modloader, settings, skins};
 use state::AppState;
 
 /// First launch (no saved `window-state` file yet): tauri.conf.json's static fallback size is
@@ -95,6 +95,8 @@ pub fn run() {
             launch::list_versions,
             launch::install_version_cmd,
             launch::launch_instance_cmd,
+            launch::stop_instance_cmd,
+            launch::running_instance_cmd,
             accounts::list_accounts,
             accounts::select_account_cmd,
             accounts::move_account_cmd,
@@ -128,15 +130,15 @@ pub fn run() {
             modloader::list_loader_versions_cmd,
             modloader::install_loader_cmd,
             modloader::remove_loader_cmd,
-            mod_browser::search_mods_cmd,
-            mod_browser::list_mod_versions_cmd,
-            mod_browser::get_mod_description_cmd,
-            mod_browser::preview_mod_install_cmd,
-            mod_browser::install_selected_mods_cmd,
-            mod_browser::list_mod_provenance_cmd,
-            mod_browser::remove_mod_source_cmd,
-            mod_browser::set_curseforge_api_key_cmd,
-            mod_browser::has_curseforge_api_key_cmd,
+            content_browser::search_content_cmd,
+            content_browser::list_content_versions_cmd,
+            content_browser::get_content_description_cmd,
+            content_browser::preview_content_install_cmd,
+            content_browser::install_selected_content_cmd,
+            content_browser::list_content_provenance_cmd,
+            content_browser::remove_content_source_cmd,
+            content_browser::set_curseforge_api_key_cmd,
+            content_browser::has_curseforge_api_key_cmd,
             settings::get_directory_settings,
             settings::set_game_dir_cmd,
             settings::set_instances_dir_cmd,

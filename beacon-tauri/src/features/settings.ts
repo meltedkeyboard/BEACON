@@ -24,7 +24,7 @@ function closeSettingsScreen() {
 
 // ---------- theme ----------
 
-const THEMES = ["beacon", "amber", "light", "amber-light"] as const;
+const THEMES = ["beacon", "amber", "light", "amber-light", "starlight"] as const;
 type Theme = (typeof THEMES)[number];
 const DEFAULT_THEME: Theme = "beacon";
 const THEME_KEY = "beacon:theme";

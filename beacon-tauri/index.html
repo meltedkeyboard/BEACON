@@ -232,6 +232,10 @@
                 <span class="theme-option__swatch" aria-hidden="true"></span>
                 <span class="theme-option__label">Light · Amber</span>
               </button>
+              <button class="theme-option" type="button" data-theme="starlight" role="radio" aria-checked="false">
+                <span class="theme-option__swatch" aria-hidden="true"></span>
+                <span class="theme-option__label">Star Light</span>
+              </button>
             </div>
           </div>
 
@@ -292,8 +296,8 @@
               <span class="settings-row__label">CurseForge API key</span>
               <span class="settings-row__hint">
                 Optional -- paste your own personal CurseForge API key to enable browsing CurseForge
-                mods (Beacon can't ship a shared key; CurseForge's own terms forbid embedding one in
-                a distributed app). <span id="curseforge-key-status">Not set.</span>
+                mods, resource packs, and shader packs (Beacon can't ship a shared key; CurseForge's
+                own terms forbid embedding one in a distributed app). <span id="curseforge-key-status">Not set.</span>
               </span>
             </div>
             <div class="settings-row__path-actions">
@@ -330,7 +334,7 @@
           <button class="accounts-screen__back" type="button" id="instance-back">&#8592; Back</button>
           <p class="accounts-screen__title" id="instance-screen-title">Instance</p>
         </header>
-        <div class="accounts-screen__body">
+        <div class="accounts-screen__body accounts-screen__body--wide">
           <div class="instance-detail__top">
             <button class="instance-detail__icon" type="button" id="instance-icon-btn" aria-label="Change icon"></button>
             <div class="instance-detail__info">
@@ -338,6 +342,7 @@
               <span class="instance-detail__version" id="instance-detail-version">&mdash;</span>
             </div>
             <div class="instance-detail__top-actions">
+              <button class="modal__btn modal__btn--primary" type="button" id="instance-playpause-btn">Start</button>
               <button class="modal__btn" type="button" id="instance-rename-btn">Rename</button>
               <button class="modal__btn modal__btn--danger" type="button" id="instance-delete-btn">Delete</button>
               <div class="overflow-menu" id="instance-overflow-menu">
@@ -351,6 +356,7 @@
               </div>
             </div>
           </div>
+          <p class="launch-error" id="instance-launch-error" hidden></p>
 
           <nav class="tabs instance-tabs" id="instance-tabs">
             <button class="tab" type="button" data-instance-tab="overview">Overview</button>
@@ -414,7 +420,10 @@
             <section>
               <div class="content-section__header">
                 <p class="content-section__title">Resource Packs</p>
-                <button class="modal__btn" type="button" id="resource-packs-open-folder-btn">Open folder</button>
+                <div class="content-section__header-actions">
+                  <button class="modal__btn" type="button" id="resource-packs-open-folder-btn">Open folder</button>
+                  <button class="modal__btn" type="button" id="resource-packs-browse-btn">Browse resource packs&hellip;</button>
+                </div>
               </div>
               <div class="manage-list" id="resource-packs-list"></div>
             </section>
@@ -424,7 +433,10 @@
             <section>
               <div class="content-section__header">
                 <p class="content-section__title">Shader Packs</p>
-                <button class="modal__btn" type="button" id="shader-packs-open-folder-btn">Open folder</button>
+                <div class="content-section__header-actions">
+                  <button class="modal__btn" type="button" id="shader-packs-open-folder-btn">Open folder</button>
+                  <button class="modal__btn" type="button" id="shader-packs-browse-btn">Browse shader packs&hellip;</button>
+                </div>
               </div>
               <div class="manage-list" id="shader-packs-list"></div>
             </section>
@@ -441,6 +453,13 @@
           </div>
 
           <div class="instance-tab-panel" data-instance-tab-panel="advanced">
+            <section>
+              <div class="content-section__header">
+                <p class="content-section__title">Game Log</p>
+                <button class="modal__btn" type="button" id="advanced-log-clear-btn">Clear</button>
+              </div>
+              <pre class="log-console" id="advanced-log-output">No active session for this instance.</pre>
+            </section>
             <section>
               <p class="content-section__title">Advanced</p>
               <p class="modal__body">Low-level jar patching, MultiMC-style. Not implemented yet.</p>
@@ -543,7 +562,7 @@
 
       <div class="modal" id="browse-mods-modal">
         <div class="modal__panel modal__panel--wide modal__panel--browse-mods">
-          <p class="modal__eyebrow">Browse mods</p>
+          <p class="modal__eyebrow" id="browse-mods-eyebrow">Browse mods</p>
           <div class="skin-variant" id="mod-source-options">
             <button class="skin-variant__option" type="button" data-source="Modrinth">Modrinth</button>
             <span class="mod-source-cf-wrap">
@@ -556,7 +575,7 @@
           <div class="browse-mods__layout">
             <div class="version-select-list browse-mods__list" id="browse-mods-results"></div>
             <div class="mod-detail-pane" id="mod-detail-pane">
-              <p class="placeholder-text" id="mod-detail-placeholder">Select a mod to see details.</p>
+              <p class="placeholder-text" id="mod-detail-placeholder">Select an item to see details.</p>
               <div id="mod-detail-content" hidden>
                 <p class="mod-detail__title" id="mod-detail-title"></p>
                 <p class="mod-detail__meta" id="mod-detail-meta"></p>

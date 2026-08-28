@@ -7,9 +7,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { initDom } from "./dom";
 import * as accounts from "./features/accounts";
+import * as contentBrowser from "./features/content-browser";
 import * as instanceContent from "./features/instance-content";
 import * as instances from "./features/instances";
-import * as modBrowser from "./features/mod-browser";
 import * as modLoader from "./features/mod-loader";
 import * as play from "./features/play";
 import * as settings from "./features/settings";
@@ -44,7 +44,7 @@ async function main() {
   instances.init();
   instanceContent.init();
   await modLoader.init();
-  modBrowser.init();
+  contentBrowser.init();
   skins.init(accounts.startSignIn);
   await play.init(accounts.startSignIn);
   await accounts.init();

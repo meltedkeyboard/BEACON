@@ -13,11 +13,22 @@ use crate::downloader::{ensure_files, DownloadTask, ProgressCallback};
 use crate::error::{io_err, CoreError, Result};
 use crate::instance::{Instance, ModLoaderKind};
 
-use super::{ModInstallPreviewEntry, ModSearchResult, ModSource, ModVersionOption};
+use super::{ContentKind, ModInstallPreviewEntry, ModSearchResult, ModSource, ModVersionOption};
 
 const BASE_URL: &str = "https://api.curseforge.com/v1";
 const MINECRAFT_GAME_ID: u32 = 432;
-const MODS_CLASS_ID: u32 = 6;
+
+/// The long-standing numeric `classId` constants every third-party CurseForge integration uses for
+/// Minecraft content (confirmed against PrismLauncher's own `FlameAPI::getClassId`, since
+/// CurseForge's docs don't list them) -- Mods, Resource Packs ("Texture Packs" in CurseForge's own
+/// UI), and Shader Packs are three separate classes, unlike Modrinth's single `project_type` facet.
+fn class_id(kind: ContentKind) -> u32 {
+    match kind {
+        ContentKind::Mod => 6,
+        ContentKind::ResourcePack => 12,
+        ContentKind::ShaderPack => 6552,
+    }
+}
 
 fn mod_loader_type(loader: ModLoaderKind) -> u32 {
     match loader {
@@ -71,25 +82,25 @@ struct Logo {
 pub async fn search(
     client: &reqwest::Client,
     api_key: &str,
+    kind: ContentKind,
     query: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     offset: u32,
 ) -> Result<Vec<ModSearchResult>> {
-    let response = client
-        .get(format!("{BASE_URL}/mods/search"))
-        .header("x-api-key", api_key)
-        .query(&[
-            ("gameId", MINECRAFT_GAME_ID.to_string()),
-            ("classId", MODS_CLASS_ID.to_string()),
-            ("modLoaderType", mod_loader_type(loader).to_string()),
-            ("gameVersion", mc_version.to_string()),
-            ("searchFilter", query.to_string()),
-            ("index", offset.to_string()),
-            ("pageSize", "20".to_string()),
-        ])
-        .send()
-        .await?;
+    let mut params = vec![
+        ("gameId".to_string(), MINECRAFT_GAME_ID.to_string()),
+        ("classId".to_string(), class_id(kind).to_string()),
+        ("gameVersion".to_string(), mc_version.to_string()),
+        ("searchFilter".to_string(), query.to_string()),
+        ("index".to_string(), offset.to_string()),
+        ("pageSize".to_string(), "20".to_string()),
+    ];
+    // A resource pack or shader pack isn't scoped to a mod loader (see `ContentKind` doc comment).
+    if let Some(loader) = loader {
+        params.push(("modLoaderType".to_string(), mod_loader_type(loader).to_string()));
+    }
+    let response = client.get(format!("{BASE_URL}/mods/search")).header("x-api-key", api_key).query(&params).send().await?;
 
     if !response.status().is_success() {
         return Err(status_to_error(response.status()));
@@ -157,15 +168,14 @@ async fn fetch_files(
     client: &reqwest::Client,
     api_key: &str,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
 ) -> Result<Vec<FileEntry>> {
-    let response = client
-        .get(format!("{BASE_URL}/mods/{project_id}/files"))
-        .header("x-api-key", api_key)
-        .query(&[("gameVersion", mc_version.to_string()), ("modLoaderType", mod_loader_type(loader).to_string())])
-        .send()
-        .await?;
+    let mut params = vec![("gameVersion".to_string(), mc_version.to_string())];
+    if let Some(loader) = loader {
+        params.push(("modLoaderType".to_string(), mod_loader_type(loader).to_string()));
+    }
+    let response = client.get(format!("{BASE_URL}/mods/{project_id}/files")).header("x-api-key", api_key).query(&params).send().await?;
     if !response.status().is_success() {
         return Err(status_to_error(response.status()));
     }
@@ -187,7 +197,7 @@ async fn resolve_file(
     client: &reqwest::Client,
     api_key: &str,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     file_id: Option<&str>,
 ) -> Result<Option<FileEntry>> {
@@ -209,7 +219,7 @@ pub async fn list_versions(
     client: &reqwest::Client,
     api_key: &str,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
 ) -> Result<Vec<ModVersionOption>> {
     let files = fetch_files(client, api_key, project_id, loader, mc_version).await?;
@@ -245,7 +255,7 @@ pub async fn preview_install(
     client: &reqwest::Client,
     api_key: &str,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     file_id: Option<&str>,
 ) -> Result<Vec<ModInstallPreviewEntry>> {
@@ -266,9 +276,10 @@ pub async fn install(
     client: &reqwest::Client,
     config: &LauncherConfig,
     instance: &Instance,
+    kind: ContentKind,
     project_id: &str,
     file_id: Option<&str>,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     api_key: &str,
     on_progress: Option<ProgressCallback>,
 ) -> Result<String> {
@@ -285,9 +296,9 @@ pub async fn install(
         ));
     };
 
-    let mods_dir = instance.mods_dir(config);
-    tokio::fs::create_dir_all(&mods_dir).await.map_err(io_err(&mods_dir))?;
-    let task = DownloadTask { url: download_url, dest: mods_dir.join(&file.file_name), sha1: None, size: None };
+    let dest_dir = kind.dir(config, instance);
+    tokio::fs::create_dir_all(&dest_dir).await.map_err(io_err(&dest_dir))?;
+    let task = DownloadTask { url: download_url, dest: dest_dir.join(&file.file_name), sha1: None, size: None };
     ensure_files(client, vec![task], on_progress).await?;
     Ok(file.file_name)
 }

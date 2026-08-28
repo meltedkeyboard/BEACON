@@ -82,6 +82,10 @@ export interface ElRefs {
   instanceDetailNameEl: HTMLElement;
   instanceDetailVersionEl: HTMLElement;
   instanceVersionNameEl: HTMLElement;
+  instancePlayPauseBtn: HTMLButtonElement;
+  instanceLaunchErrorEl: HTMLElement;
+  advancedLogOutputEl: HTMLElement;
+  advancedLogClearBtn: HTMLButtonElement;
   instanceRenameBtn: HTMLButtonElement;
   instanceVersionBtn: HTMLButtonElement;
   instanceIconClearBtn: HTMLButtonElement;
@@ -99,8 +103,10 @@ export interface ElRefs {
   worldsOpenFolderBtn: HTMLButtonElement;
   resourcePacksListEl: HTMLElement;
   resourcePacksOpenFolderBtn: HTMLButtonElement;
+  resourcePacksBrowseBtn: HTMLButtonElement;
   shaderPacksListEl: HTMLElement;
   shaderPacksOpenFolderBtn: HTMLButtonElement;
+  shaderPacksBrowseBtn: HTMLButtonElement;
   screenshotsGridEl: HTMLElement;
   screenshotsOpenFolderBtn: HTMLButtonElement;
   createInstanceModalEl: HTMLElement;
@@ -127,6 +133,7 @@ export interface ElRefs {
   installLoaderCancelBtn: HTMLButtonElement;
   modsBrowseBtn: HTMLButtonElement;
   browseModsModalEl: HTMLElement;
+  browseModsEyebrowEl: HTMLElement;
   modSourceOptions: NodeListOf<HTMLButtonElement>;
   modSourceCurseForgeBtn: HTMLButtonElement;
   browseModsQueryInput: HTMLInputElement;
@@ -264,6 +271,10 @@ export function initDom() {
     instanceDetailNameEl: q("#instance-detail-name"),
     instanceDetailVersionEl: q("#instance-detail-version"),
     instanceVersionNameEl: q("#instance-version-name"),
+    instancePlayPauseBtn: q("#instance-playpause-btn"),
+    instanceLaunchErrorEl: q("#instance-launch-error"),
+    advancedLogOutputEl: q("#advanced-log-output"),
+    advancedLogClearBtn: q("#advanced-log-clear-btn"),
     instanceRenameBtn: q("#instance-rename-btn"),
     instanceVersionBtn: q("#instance-version-btn"),
     instanceIconClearBtn: q("#instance-icon-clear-btn"),
@@ -281,8 +292,10 @@ export function initDom() {
     worldsOpenFolderBtn: q("#worlds-open-folder-btn"),
     resourcePacksListEl: q("#resource-packs-list"),
     resourcePacksOpenFolderBtn: q("#resource-packs-open-folder-btn"),
+    resourcePacksBrowseBtn: q("#resource-packs-browse-btn"),
     shaderPacksListEl: q("#shader-packs-list"),
     shaderPacksOpenFolderBtn: q("#shader-packs-open-folder-btn"),
+    shaderPacksBrowseBtn: q("#shader-packs-browse-btn"),
     screenshotsGridEl: q("#screenshots-grid"),
     screenshotsOpenFolderBtn: q("#screenshots-open-folder-btn"),
     createInstanceModalEl: q("#create-instance-modal"),
@@ -309,6 +322,7 @@ export function initDom() {
     installLoaderCancelBtn: q("#install-loader-cancel"),
     modsBrowseBtn: q("#mods-browse-btn"),
     browseModsModalEl: q("#browse-mods-modal"),
+    browseModsEyebrowEl: q("#browse-mods-eyebrow"),
     modSourceOptions: document.querySelectorAll<HTMLButtonElement>("#mod-source-options .skin-variant__option"),
     modSourceCurseForgeBtn: q("#mod-source-curseforge"),
     browseModsQueryInput: q("#browse-mods-query"),

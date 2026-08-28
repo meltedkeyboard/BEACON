@@ -15,6 +15,10 @@
   --beacon-shade: #256b36;
   --beacon-ink: #f4f2ec;
   --danger: #b33a3a;
+  /* Fixed (not theme-paired like --beacon-ink) -- --danger's red is dark enough against light
+     text in every theme, whereas --beacon-ink flips to a dark tone in the amber themes, which
+     made red-on-hover buttons go dark-text-on-dark-red -- unreadable. */
+  --danger-ink: #f4f2ec;
 
   --font-ui: "Segoe UI Variable", "Segoe UI", -apple-system, "Noto Sans", "Cantarell", "Ubuntu", sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "Noto Sans Mono", monospace;
@@ -71,6 +75,26 @@
   --beacon-shade: #96660f;
   --beacon-ink: #1a1408;
   --danger: #a23030;
+}
+
+/* Star Light -- strict two-tone: every surface pure black, every border and text pure white, no
+   accent or semantic hue at all -- not even for danger/primary emphasis. Emphasis is carried by
+   inverting fill and text (white bg, black text) rather than introducing another color, which is
+   also why --danger-ink is overridden here unlike the other themes: the default --danger-ink is
+   fixed white because it's meant to sit on a dark-red fill, but here --danger is white too, so its
+   hover fill needs black text instead. */
+:root[data-theme="starlight"] {
+  --bg-app: #000000;
+  --panel: #000000;
+  --panel-art: #000000;
+  --border: #ffffff;
+  --ink: #ffffff;
+  --dim: #ffffff;
+  --beacon: #ffffff;
+  --beacon-shade: #ffffff;
+  --beacon-ink: #000000;
+  --danger: #ffffff;
+  --danger-ink: #000000;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -289,6 +313,15 @@ button {
   gap: 24px;
 }
 
+/* Instance-detail reuses `.accounts-screen__body`'s shared scrolling-column shell, but unlike
+   Accounts/Settings (short label-value rows that read best narrow) its content is a mods/worlds/
+   resource-packs table -- capping it at 640px left most of a 1100px-wide default window empty on
+   both sides. Wide enough to use the room on the default window size without going edge-to-edge
+   and stretching sparse rows on an ultrawide monitor. */
+.accounts-screen__body--wide {
+  max-width: 1040px;
+}
+
 .accounts-screen__actions {
   display: flex;
   gap: 12px;
@@ -488,6 +521,14 @@ button {
 }
 .theme-option[data-theme="amber-light"] .theme-option__swatch::after {
   background: #c98a1f;
+}
+
+.theme-option[data-theme="starlight"] .theme-option__swatch {
+  background: #000000;
+  border: 1px solid #ffffff;
+}
+.theme-option[data-theme="starlight"] .theme-option__swatch::after {
+  background: #ffffff;
 }
 
 .instance-detail__top {
@@ -1116,9 +1157,11 @@ button {
    attribute name (`data-instance-tab`) avoids that global selector picking these up too. */
 .instance-tabs {
   /* `.tabs`' own 36px gap assumes the top-level bar's much wider `.panel` content area -- seven
-     tabs at that spacing genuinely don't fit this screen's narrower 640px-max column (confirmed:
-     560px available, ~654px needed), which is what was actually forcing the whole scrolling
-     `.accounts-screen__body` wider than its container instead of just wrapping. */
+     tabs at that spacing didn't fit this screen's column back when it was capped at 640px
+     (confirmed: 560px available, ~654px needed), which was forcing the whole scrolling
+     `.accounts-screen__body` wider than its container instead of just wrapping. The tighter gap
+     plus wrap stay even now that the column is wider (`.accounts-screen__body--wide`) as a safety
+     net for the 720px minimum window width. */
   gap: 8px 20px;
   flex-wrap: wrap;
   margin-bottom: 4px;
@@ -1131,8 +1174,29 @@ button {
   gap: 24px;
 }
 
+/* Entrance-only fade+slide, not the top-level `.tab-panel`'s crossfade -- that needs both panels
+   absolutely positioned over each other, which needs a fixed-height ancestor `.accounts-screen__body`
+   doesn't have (see the block comment above). Going from `display: none` straight to `flex` still
+   lets a plain animation play on the panel that's newly shown, since there's never a moment with
+   two panels in flow at once -- just no matching exit animation for the one being hidden. */
 .instance-tab-panel.is-active {
   display: flex;
+  /* `--tab-motion` already bundles duration+easing ("160ms ease-out", same as `.tab-panel`'s own
+     `transition: opacity var(--tab-motion)`) -- appending another timing-function here broke the
+     `animation` shorthand's syntax outright (computed animation-name came back "none", not just
+     "already finished"). */
+  animation: instance-tab-in var(--tab-motion);
+}
+
+@keyframes instance-tab-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* ---------- overflow menu (instance-detail's "..." button for rarer actions) ----------
@@ -1617,7 +1681,20 @@ button {
 .modal__btn--danger:hover {
   background: var(--danger);
   border-color: var(--danger);
-  color: var(--beacon-ink);
+  color: var(--danger-ink);
+}
+
+/* Without this, the plain `.modal__btn:disabled` rule (color: var(--dim)) wins on specificity
+   over `.modal__btn--danger`'s red text, and its `:disabled:hover` rule keeps the background
+   transparent -- so a disabled Delete button showed dim grey text that read as barely-there
+   against the panel, both at rest and on hover. */
+.modal__btn--danger:disabled {
+  color: var(--danger);
+  opacity: 0.45;
+}
+
+.modal__btn--danger:disabled:hover {
+  background: none;
 }
 
 .modal__panel--wide {
@@ -1744,6 +1821,23 @@ button {
   font-size: 13px;
 }
 
+/* ---------- advanced tab: game log console ---------- */
+
+.log-console {
+  margin: 0 0 20px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  background: var(--bg-app);
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 /* ---------- manage accounts ---------- */
 
 .manage-list {
@@ -1755,7 +1849,6 @@ button {
 .manage-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
@@ -1777,6 +1870,26 @@ button {
   box-shadow: inset 3px 0 0 var(--beacon);
 }
 
+/* Column separators for the Mods table -- a thin line centered in the gap before the icon and
+   before the name/version cell, so checkbox/icon/name read as table columns rather than a loose
+   list. A pseudo-element rather than a border on the cells themselves, since a border on
+   `.manage-row__icon` (fixed 32x32) would grow its box and distort the square. */
+.manage-row--selectable .manage-row__icon,
+.manage-row--selectable .manage-row__info {
+  position: relative;
+}
+
+.manage-row--selectable .manage-row__icon::before,
+.manage-row--selectable .manage-row__info::before {
+  content: "";
+  position: absolute;
+  top: -14px;
+  bottom: -14px;
+  left: -6px;
+  width: 1px;
+  background: var(--border);
+}
+
 .manage-row:last-child {
   border-bottom: none;
 }
@@ -1792,6 +1905,12 @@ button {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  /* Fills whatever space the row's other cells don't use, so the name/version text sits right
+     after the icon (left-aligned) instead of `justify-content: space-between` (removed above)
+     shoving it toward the row's far edge with a big gap after the icon. Also what pushes a
+     trailing `.manage-row__actions` block to the true right edge, same as space-between did. */
+  flex: 1;
+  text-align: left;
 }
 
 /* Search result icon (Browse mods modal) -- sits before .manage-row__info in the same row. */
@@ -1858,7 +1977,7 @@ button {
 
 .manage-row__btn--danger:hover {
   background: var(--danger);
-  color: var(--beacon-ink);
+  color: var(--danger-ink);
   border-color: var(--danger);
 }
 

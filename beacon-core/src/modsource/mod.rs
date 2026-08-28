@@ -11,6 +11,8 @@
 //! (the mod's own README/overview, Markdown for Modrinth or HTML for CurseForge -- rendering and
 //! sanitizing happens frontend-side, this just fetches the raw text).
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::config::LauncherConfig;
@@ -26,6 +28,29 @@ pub mod modrinth;
 pub enum ModSource {
     Modrinth,
     CurseForge,
+}
+
+/// What kind of content is being browsed/installed -- the mod browser, resource-pack browser, and
+/// shader-pack browser are all the same search/preview/install flow against Modrinth/CurseForge,
+/// differing only in which project-type/class the search is scoped to, which folder `install`
+/// writes into, and whether a mod loader is even relevant (only `Mod` has one -- a resource pack or
+/// shader pack targets a Minecraft version only, never a loader).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ContentKind {
+    Mod,
+    ResourcePack,
+    ShaderPack,
+}
+
+impl ContentKind {
+    pub fn dir(self, config: &LauncherConfig, instance: &Instance) -> PathBuf {
+        match self {
+            ContentKind::Mod => instance.mods_dir(config),
+            ContentKind::ResourcePack => instance.resource_packs_dir(config),
+            ContentKind::ShaderPack => instance.shader_packs_dir(config),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,17 +96,18 @@ pub struct ModProvenanceEntry {
 pub async fn search(
     client: &reqwest::Client,
     source: ModSource,
+    kind: ContentKind,
     query: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     offset: u32,
     curseforge_api_key: Option<&str>,
 ) -> Result<Vec<ModSearchResult>> {
     match source {
-        ModSource::Modrinth => modrinth::search(client, query, loader, mc_version, offset).await,
+        ModSource::Modrinth => modrinth::search(client, kind, query, loader, mc_version, offset).await,
         ModSource::CurseForge => {
             let key = curseforge_api_key.ok_or(CoreError::CurseForgeKeyMissing)?;
-            curseforge::search(client, key, query, loader, mc_version, offset).await
+            curseforge::search(client, key, kind, query, loader, mc_version, offset).await
         }
     }
 }
@@ -90,7 +116,7 @@ pub async fn list_versions(
     client: &reqwest::Client,
     source: ModSource,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     curseforge_api_key: Option<&str>,
 ) -> Result<Vec<ModVersionOption>> {
@@ -108,7 +134,7 @@ pub async fn preview_install(
     source: ModSource,
     project_id: &str,
     version_id: Option<&str>,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     curseforge_api_key: Option<&str>,
 ) -> Result<Vec<ModInstallPreviewEntry>> {
@@ -122,25 +148,27 @@ pub async fn preview_install(
 }
 
 /// Downloads `project_id`'s file -- `version_id` if given, else the newest compatible with
-/// `instance`'s current `version_id` + `loader` (Modrinth: plus every `required` dependency,
-/// resolved the same way) -- into `instance.mods_dir()`. Returns the root project's own installed
-/// filename (not any dependency's), for the caller to record as this install's provenance.
+/// `instance`'s current `version_id` (+ `loader`, for `ContentKind::Mod` only; Modrinth: plus every
+/// `required` dependency, resolved the same way) -- into `kind.dir(config, instance)`. Returns the
+/// root project's own installed filename (not any dependency's), for the caller to record as this
+/// install's provenance.
 pub async fn install(
     client: &reqwest::Client,
     config: &LauncherConfig,
     instance: &Instance,
     source: ModSource,
+    kind: ContentKind,
     project_id: &str,
     version_id: Option<&str>,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     curseforge_api_key: Option<&str>,
     on_progress: Option<ProgressCallback>,
 ) -> Result<String> {
     match source {
-        ModSource::Modrinth => modrinth::install(client, config, instance, project_id, version_id, loader, on_progress).await,
+        ModSource::Modrinth => modrinth::install(client, config, instance, kind, project_id, version_id, loader, on_progress).await,
         ModSource::CurseForge => {
             let key = curseforge_api_key.ok_or(CoreError::CurseForgeKeyMissing)?;
-            curseforge::install(client, config, instance, project_id, version_id, loader, key, on_progress).await
+            curseforge::install(client, config, instance, kind, project_id, version_id, loader, key, on_progress).await
         }
     }
 }

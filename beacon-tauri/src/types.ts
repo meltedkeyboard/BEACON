@@ -22,6 +22,13 @@ export interface DownloadProgress {
   current_file: string | null;
 }
 
+export type LaunchStatus = "launching" | "running" | "exited";
+
+export interface LaunchStatusEvent {
+  instanceId: string;
+  status: LaunchStatus;
+}
+
 export interface DeviceAuthorization {
   device_code: string;
   user_code: string;
@@ -61,6 +68,13 @@ export interface LoaderVersionInfo {
 }
 
 export type ModSource = "Modrinth" | "CurseForge";
+
+// The mod browser, resource-pack browser, and shader-pack browser all search/preview/install
+// against the same two sources -- `ContentKind` is what tells the shared backend commands (and the
+// shared browser modal) which of the three folders/facets/classes to use. The `Mod*`-named types
+// below are shaped identically for all three kinds (only ever "a searchable download"), so they're
+// reused as-is rather than renamed.
+export type ContentKind = "Mod" | "ResourcePack" | "ShaderPack";
 
 export interface ModSearchResult {
   id: string;

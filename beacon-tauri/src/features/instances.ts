@@ -4,16 +4,17 @@
 // `./instance-content` instead -- a distinct concern from instance identity CRUD.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { el } from "../dom";
-import { applyDecorativeIcon, describeError, instanceIconBackground, openFolder } from "../helpers";
+import { accountKey, applyDecorativeIcon, describeError, instanceIconBackground, openFolder } from "../helpers";
 import { closeAllScreens, openConfirmModal, showErrorModal } from "../modals";
 import { currentInstance, state } from "../state";
-import type { Instance, InstancesResponse } from "../types";
+import type { Instance, InstancesResponse, LaunchStatusEvent } from "../types";
 import { firstVersionId, renderVersionOptions } from "../versions";
+import * as contentBrowser from "./content-browser";
 import { refreshInstanceContent } from "./instance-content";
-import * as modBrowser from "./mod-browser";
 import * as modLoader from "./mod-loader";
 import * as play from "./play";
 
@@ -215,6 +216,138 @@ function showInstanceTab(target: string) {
   instanceTabPanels.forEach((panel) => panel.classList.toggle("is-active", panel.dataset.instanceTabPanel === target));
 }
 
+// ---------- instance detail: Start/Stop + game log ----------
+// Independent from the playbar's own Play button (`features/play.ts`) -- this lets a user launch
+// or stop the instance they're currently customizing without leaving the detail screen. Only one
+// instance can ever be launching/running at a time (enforced backend-side).
+//
+// Tracked with its own local mirror (`runningInstanceId` below) rather than reading
+// `play.runningInstance()` inside this screen's own `launch-status` handler -- both modules
+// listen for the same event independently, and `instances.init()` runs before `play.init()`
+// (see `main.ts`), so this screen's callback can fire *before* play.ts has updated its copy for
+// the same event. Deriving straight from the event payload avoids that ordering race.
+let runningInstanceId: string | null = null;
+// True only for the (short) window between clicking Start and the backend's first "launching"
+// event -- once that arrives, `runningInstanceId` takes over as the source of truth.
+let instanceLaunchStarting = false;
+
+// Buffered so switching away from the Advanced tab and back doesn't lose lines received while it
+// wasn't visible -- cleared and re-tagged every time a *new* launch's first log line would
+// otherwise get appended after stale lines from a previous run of the same instance.
+let gameLogInstanceId: string | null = null;
+let gameLogLines: string[] = [];
+
+function renderGameLog() {
+  if (gameLogInstanceId !== state.viewingInstanceId || gameLogLines.length === 0) {
+    el.advancedLogOutputEl.textContent = "No active session for this instance.";
+    return;
+  }
+  el.advancedLogOutputEl.textContent = gameLogLines.join("\n");
+  el.advancedLogOutputEl.scrollTop = el.advancedLogOutputEl.scrollHeight;
+}
+
+function renderInstancePlayPauseButton() {
+  const instance = state.instances.find((i) => i.id === state.viewingInstanceId);
+  if (!instance) return;
+  const running = runningInstanceId;
+  const btn = el.instancePlayPauseBtn;
+  btn.classList.remove("modal__btn--danger", "modal__btn--primary");
+
+  if (running === instance.id) {
+    btn.disabled = false;
+    btn.textContent = "Stop";
+    btn.classList.add("modal__btn--danger");
+    return;
+  }
+  if (running) {
+    btn.disabled = true;
+    btn.textContent = "Another instance is running";
+    return;
+  }
+  if (instanceLaunchStarting) {
+    btn.disabled = true;
+    btn.textContent = "Starting…";
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = "Start";
+  btn.classList.add("modal__btn--primary");
+}
+
+async function handleInstancePlayPauseClick() {
+  const instance = state.instances.find((i) => i.id === state.viewingInstanceId);
+  if (!instance) return;
+  const running = runningInstanceId;
+
+  if (running === instance.id) {
+    try {
+      await invoke("stop_instance_cmd", { instanceId: instance.id });
+    } catch (err) {
+      console.error(err);
+      showErrorModal(describeError(err));
+    }
+    return;
+  }
+  if (running || instanceLaunchStarting) return;
+
+  if (!state.currentAccount) {
+    showErrorModal("Sign in to an account first.");
+    return;
+  }
+
+  el.instanceLaunchErrorEl.hidden = true;
+  instanceLaunchStarting = true;
+  renderInstancePlayPauseButton();
+  try {
+    await invoke("launch_instance_cmd", {
+      instanceId: instance.id,
+      account: { type: "saved", accountId: accountKey(state.currentAccount) },
+    });
+  } catch (err) {
+    console.error(err);
+    const message = `Couldn't launch: ${describeError(err)}`;
+    el.instanceLaunchErrorEl.textContent = message;
+    el.instanceLaunchErrorEl.hidden = false;
+    showErrorModal(message);
+  } finally {
+    instanceLaunchStarting = false;
+    renderInstancePlayPauseButton();
+  }
+}
+
+function initInstanceLaunchControls() {
+  el.instancePlayPauseBtn.addEventListener("click", () => void handleInstancePlayPauseClick());
+  el.advancedLogClearBtn.addEventListener("click", () => {
+    gameLogLines = [];
+    renderGameLog();
+  });
+
+  void invoke<string | null>("running_instance_cmd").then((id) => {
+    runningInstanceId = id;
+    if (state.viewingInstanceId) renderInstancePlayPauseButton();
+  });
+
+  void listen<LaunchStatusEvent>("launch-status", (event) => {
+    const { instanceId, status } = event.payload;
+    runningInstanceId = status === "exited" ? null : instanceId;
+    if (status === "launching") {
+      gameLogInstanceId = instanceId;
+      gameLogLines = [];
+    }
+    if (state.viewingInstanceId === instanceId || (status === "exited" && gameLogInstanceId === instanceId)) {
+      renderGameLog();
+    }
+    if (state.viewingInstanceId) renderInstancePlayPauseButton();
+  });
+
+  void listen<string>("game-log", (event) => {
+    if (!gameLogInstanceId) return;
+    gameLogLines.push(event.payload);
+    if (gameLogLines.length > 2000) gameLogLines.shift();
+    if (gameLogInstanceId === state.viewingInstanceId) renderGameLog();
+  });
+}
+
 // ---------- overflow menu (Clear icon / Open .minecraft / Open libraries / Export) ----------
 
 function closeOverflowMenu() {
@@ -248,7 +381,9 @@ function renderInstanceDetail() {
   el.instanceVersionNameEl.textContent = `Minecraft ${instance.version_id}`;
   el.instanceIconBtn.style.backgroundImage = instanceIconBackground(instance);
   modLoader.renderLoaderRow(instance);
-  modBrowser.renderBrowseButton(instance);
+  contentBrowser.renderModsBrowseButton(instance.mod_loader !== null);
+  renderInstancePlayPauseButton();
+  renderGameLog();
   void refreshInstanceContent(instance.id);
 }
 
@@ -383,6 +518,8 @@ async function deleteInstance(instanceId: string) {
 }
 
 export function init() {
+  initInstanceLaunchControls();
+
   instanceTabs = document.querySelectorAll<HTMLButtonElement>("[data-instance-tab]");
   instanceTabPanels = document.querySelectorAll<HTMLElement>("[data-instance-tab-panel]");
   instanceTabs.forEach((tab) => {

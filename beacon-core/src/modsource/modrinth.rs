@@ -11,7 +11,7 @@ use crate::downloader::{ensure_files, DownloadTask, ProgressCallback};
 use crate::error::{io_err, CoreError, Result};
 use crate::instance::{Instance, ModLoaderKind};
 
-use super::{ModInstallPreviewEntry, ModSearchResult, ModSource, ModVersionOption};
+use super::{ContentKind, ModInstallPreviewEntry, ModSearchResult, ModSource, ModVersionOption};
 
 const BASE_URL: &str = "https://api.modrinth.com/v2";
 // Modrinth's docs ask for a descriptive User-Agent identifying the app (not a generic HTTP-client
@@ -24,6 +24,15 @@ fn loader_slug(loader: ModLoaderKind) -> &'static str {
         ModLoaderKind::Forge => "forge",
         ModLoaderKind::NeoForge => "neoforge",
         ModLoaderKind::Quilt => "quilt",
+    }
+}
+
+/// Modrinth's own `project_type` facet value -- confirmed against real search requests.
+fn project_type(kind: ContentKind) -> &'static str {
+    match kind {
+        ContentKind::Mod => "mod",
+        ContentKind::ResourcePack => "resourcepack",
+        ContentKind::ShaderPack => "shader",
     }
 }
 
@@ -48,14 +57,20 @@ struct SearchHit {
 
 pub async fn search(
     client: &reqwest::Client,
+    kind: ContentKind,
     query: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     offset: u32,
 ) -> Result<Vec<ModSearchResult>> {
     // Outer arrays AND together, entries within one inner array OR together -- this is
-    // "project_type=mod AND versions=<mc_version> AND categories=<loader>".
-    let facets = format!(r#"[["project_type:mod"],["versions:{mc_version}"],["categories:{}"]]"#, loader_slug(loader));
+    // "project_type=<kind> AND versions=<mc_version>[ AND categories=<loader>]". The loader facet
+    // only makes sense for mods -- a resource pack or shader pack isn't scoped to a mod loader, so
+    // `loader` is `None` for those (see `ContentKind` doc comment).
+    let mut facets = format!(r#"[["project_type:{}"],["versions:{mc_version}"]]"#, project_type(kind));
+    if let Some(loader) = loader {
+        facets = format!(r#"[["project_type:{}"],["versions:{mc_version}"],["categories:{}"]]"#, project_type(kind), loader_slug(loader));
+    }
 
     let response: SearchResponse = client
         .get(format!("{BASE_URL}/search"))
@@ -136,7 +151,7 @@ fn pick_file(version: &VersionEntry) -> Option<&VersionFile> {
 async fn best_version(
     client: &reqwest::Client,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
 ) -> Result<Option<VersionEntry>> {
     let versions = versions_for(client, project_id, loader, mc_version).await?;
@@ -155,13 +170,13 @@ async fn best_version(
 async fn versions_for(
     client: &reqwest::Client,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
 ) -> Result<Vec<VersionEntry>> {
-    let url = format!(
-        "{BASE_URL}/project/{project_id}/version?loaders=[\"{}\"]&game_versions=[\"{mc_version}\"]",
-        loader_slug(loader),
-    );
+    let mut url = format!("{BASE_URL}/project/{project_id}/version?game_versions=[\"{mc_version}\"]");
+    if let Some(loader) = loader {
+        url = format!("{url}&loaders=[\"{}\"]", loader_slug(loader));
+    }
     Ok(client.get(&url).header("User-Agent", USER_AGENT).send().await?.error_for_status()?.json().await?)
 }
 
@@ -179,7 +194,7 @@ async fn version_by_id(client: &reqwest::Client, version_id: &str) -> Result<Ver
 pub async fn list_versions(
     client: &reqwest::Client,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
 ) -> Result<Vec<ModVersionOption>> {
     let versions = versions_for(client, project_id, loader, mc_version).await?;
@@ -227,7 +242,7 @@ struct PlanEntry {
 async fn resolve_plan(
     client: &reqwest::Client,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     root_version_id: Option<&str>,
 ) -> Result<Vec<PlanEntry>> {
@@ -315,7 +330,7 @@ async fn fetch_titles(client: &reqwest::Client, project_ids: &[String]) -> Resul
 pub async fn preview_install(
     client: &reqwest::Client,
     project_id: &str,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     mc_version: &str,
     version_id: Option<&str>,
 ) -> Result<Vec<ModInstallPreviewEntry>> {
@@ -338,19 +353,20 @@ pub async fn install(
     client: &reqwest::Client,
     config: &LauncherConfig,
     instance: &Instance,
+    kind: ContentKind,
     project_id: &str,
     version_id: Option<&str>,
-    loader: ModLoaderKind,
+    loader: Option<ModLoaderKind>,
     on_progress: Option<ProgressCallback>,
 ) -> Result<String> {
-    let mods_dir = instance.mods_dir(config);
-    tokio::fs::create_dir_all(&mods_dir).await.map_err(io_err(&mods_dir))?;
+    let dest_dir = kind.dir(config, instance);
+    tokio::fs::create_dir_all(&dest_dir).await.map_err(io_err(&dest_dir))?;
 
     let plan = resolve_plan(client, project_id, loader, &instance.version_id, version_id).await?;
     let root_filename = plan.iter().find(|e| !e.is_dependency).map(|e| e.filename.clone());
     let tasks = plan
         .into_iter()
-        .map(|e| DownloadTask { url: e.url, dest: mods_dir.join(&e.filename), sha1: Some(e.sha1), size: None })
+        .map(|e| DownloadTask { url: e.url, dest: dest_dir.join(&e.filename), sha1: Some(e.sha1), size: None })
         .collect();
     ensure_files(client, tasks, on_progress).await?;
 

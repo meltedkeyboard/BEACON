@@ -427,40 +427,40 @@ pub fn add_mods(config: &LauncherConfig, instance: &Instance, source_paths: &[Pa
     Ok(())
 }
 
-/// Sidecar file recording which mod-browser install a jar came from -- deliberately not a
-/// `config.json`/`Instance` field, since it's a growing collection tied 1:1 to files in `mods/`,
-/// same spirit as the `.disabled` suffix convention already used there. Hidden (dot-prefixed), so
+/// Sidecar file (one per content folder -- `mods/`, `resourcepacks/`, `shaderpacks/`) recording
+/// which content-browser install a file came from -- deliberately not a `config.json`/`Instance`
+/// field, since it's a growing collection tied 1:1 to files in that one folder, same spirit as the
+/// `.disabled` suffix convention `mods/` already uses. Hidden (dot-prefixed), so
 /// `list_dir_entries`'s existing `!name.starts_with('.')` filter already keeps it out of
-/// `list_mods`/`list_dir_entries` callers without any extra filtering here.
+/// `list_mods`/`list_resource_packs`/`list_dir_entries` callers without any extra filtering here.
+/// The name says "mod" for historical reasons (mods shipped first) -- harmless to keep, since it's
+/// purely an internal, per-directory implementation detail never surfaced to the user.
 const MOD_SOURCES_FILE: &str = ".beacon-mod-sources.json";
 
-fn read_mod_provenance_file(mods_dir: &Path) -> HashMap<String, ModProvenanceEntry> {
-    std::fs::read(mods_dir.join(MOD_SOURCES_FILE))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+fn read_provenance_file(dir: &Path) -> HashMap<String, ModProvenanceEntry> {
+    std::fs::read(dir.join(MOD_SOURCES_FILE)).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default()
 }
 
-/// Records that `filename` (already installed in `mods/`) came from `source`'s `project_id` --
-/// called once per root mod right after the mod-browser's install succeeds. Dependencies pulled in
-/// alongside it are deliberately left untracked (see module-level plan notes): removing a mod only
-/// ever removes its own file, never a shared dependency another mod might also need.
-pub fn record_mod_provenance(config: &LauncherConfig, instance: &Instance, filename: &str, source: ModSource, project_id: &str) -> Result<()> {
-    let mods_dir = instance.mods_dir(config);
-    std::fs::create_dir_all(&mods_dir).map_err(io_err(&mods_dir))?;
-    let mut map = read_mod_provenance_file(&mods_dir);
+/// Records that `filename` (already installed in `dir` -- a mod/resource-pack/shader-pack folder,
+/// see `ContentKind::dir`) came from `source`'s `project_id` -- called once per root item right
+/// after the content browser's install succeeds. Dependencies pulled in alongside it (mods only;
+/// Modrinth resource packs/shaders never have any) are deliberately left untracked (see module-
+/// level plan notes): removing an item only ever removes its own file, never a shared dependency
+/// another item might also need.
+pub fn record_content_provenance(dir: &Path, filename: &str, source: ModSource, project_id: &str) -> Result<()> {
+    std::fs::create_dir_all(dir).map_err(io_err(dir))?;
+    let mut map = read_provenance_file(dir);
     map.insert(filename.to_string(), ModProvenanceEntry { source, project_id: project_id.to_string() });
-    let path = mods_dir.join(MOD_SOURCES_FILE);
+    let path = dir.join(MOD_SOURCES_FILE);
     std::fs::write(&path, serde_json::to_vec_pretty(&map)?).map_err(io_err(&path))?;
     Ok(())
 }
 
-/// Reads back what `record_mod_provenance` wrote, filtered to files that still actually exist --
-/// self-healing against a jar deleted some other way (the ordinary Mods list's own Remove button,
-/// or by hand) without needing to hook every deletion path to also prune this file.
-pub fn load_mod_provenance(config: &LauncherConfig, instance: &Instance) -> HashMap<String, ModProvenanceEntry> {
-    let mods_dir = instance.mods_dir(config);
-    read_mod_provenance_file(&mods_dir).into_iter().filter(|(filename, _)| mods_dir.join(filename).is_file()).collect()
+/// Reads back what `record_content_provenance` wrote, filtered to files that still actually exist
+/// -- self-healing against a file deleted some other way (the ordinary list's own Remove button, or
+/// by hand) without needing to hook every deletion path to also prune this file.
+pub fn load_content_provenance(dir: &Path) -> HashMap<String, ModProvenanceEntry> {
+    read_provenance_file(dir).into_iter().filter(|(filename, _)| dir.join(filename).is_file()).collect()
 }
 
 pub fn delete_world(config: &LauncherConfig, instance: &Instance, world_name: &str) -> Result<()> {

@@ -1,10 +1,12 @@
-// "Browse mods…" modal on the instance-detail screen's Mods section: search Modrinth (always
-// available) or CurseForge (only once the user has pasted their own API key in Settings -- see
-// that file's own header comment for why Beacon can't ship a shared key). Checkboxes select
-// mods to install; "Review & Install" opens a table showing exactly which version of each (plus,
-// Modrinth only, which dependencies it brings in) will be downloaded, changeable via a dropdown,
-// before anything actually happens -- the whole point being visibility into what "compatible
-// version" the backend picked, instead of a silent one-click auto-install.
+// "Browse mods/resource packs/shader packs…" modal, shared by all three of the instance-detail
+// screen's own tabs -- search Modrinth (always available) or CurseForge (only once the user has
+// pasted their own API key in Settings -- see that file's own header comment for why Beacon can't
+// ship a shared key). Checkboxes select items to install; "Review & Install" opens a table showing
+// exactly which version of each (plus, Modrinth mods only, which dependencies it brings in) will be
+// downloaded, changeable via a dropdown, before anything actually happens -- the whole point being
+// visibility into what "compatible version" the backend picked, instead of a silent one-click
+// auto-install. One modal instance is reused for all three content kinds (see `KIND_LABELS`)
+// instead of tripling the HTML/CSS/JS for what's otherwise an identical flow.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -16,8 +18,8 @@ import { describeError } from "../helpers";
 import { openConfirmModal } from "../modals";
 import { state } from "../state";
 import type {
+  ContentKind,
   DownloadProgress,
-  Instance,
   ModInstallPreviewEntry,
   ModProvenanceEntry,
   ModSearchResult,
@@ -26,11 +28,28 @@ import type {
 } from "../types";
 import { refreshInstanceContent } from "./instance-content";
 
+const KIND_LABELS: Record<ContentKind, { noun: string; title: string; searchPlaceholder: string; emptyText: string }> = {
+  Mod: { noun: "mod", title: "Browse mods", searchPlaceholder: "Search mods…", emptyText: "No mods found." },
+  ResourcePack: {
+    noun: "resource pack",
+    title: "Browse resource packs",
+    searchPlaceholder: "Search resource packs…",
+    emptyText: "No resource packs found.",
+  },
+  ShaderPack: {
+    noun: "shader pack",
+    title: "Browse shader packs",
+    searchPlaceholder: "Search shader packs…",
+    emptyText: "No shader packs found.",
+  },
+};
+
 function resultKey(source: ModSource, id: string): string {
   return `${source}:${id}`;
 }
 
 let currentInstanceId: string | null = null;
+let currentKind: ContentKind = "Mod";
 let selectedSource: ModSource = "Modrinth";
 let hasCurseForgeKey = false;
 let searchToken = 0;
@@ -63,7 +82,7 @@ function updateReviewButton() {
   el.browseModsReviewBtn.disabled = selected.size === 0;
 }
 
-function renderResultCard(result: ModSearchResult) {
+function renderResultCard(result: ModSearchResult): HTMLElement {
   const key = resultKey(result.source, result.id);
   const row = document.createElement("div");
   row.className = "manage-row";
@@ -113,9 +132,9 @@ function renderResultCard(result: ModSearchResult) {
     removeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       openConfirmModal(
-        "Remove mod?",
+        `Remove ${KIND_LABELS[currentKind].noun}?`,
         `This permanently deletes "${installedFilename}". This can't be undone.`,
-        () => void removeInstalledMod(key, installedFilename),
+        () => void removeInstalledContent(key, installedFilename),
       );
     });
     row.appendChild(removeBtn);
@@ -130,7 +149,7 @@ function renderResults(results: ModSearchResult[]) {
   if (results.length === 0) {
     const empty = document.createElement("p");
     empty.className = "placeholder-text";
-    empty.textContent = "No mods found.";
+    empty.textContent = KIND_LABELS[currentKind].emptyText;
     el.browseModsResultsEl.appendChild(empty);
     return;
   }
@@ -143,16 +162,18 @@ async function runSearch() {
   if (!currentInstanceId) return;
   const token = ++searchToken;
   const instanceId = currentInstanceId;
+  const kind = currentKind;
   el.browseModsErrorEl.hidden = true;
   try {
     const [results, provenance] = await Promise.all([
-      invoke<ModSearchResult[]>("search_mods_cmd", {
+      invoke<ModSearchResult[]>("search_content_cmd", {
         instanceId,
+        kind,
         source: selectedSource,
         query: el.browseModsQueryInput.value.trim(),
         offset: 0,
       }),
-      invoke<ModProvenanceEntry[]>("list_mod_provenance_cmd", { instanceId }),
+      invoke<ModProvenanceEntry[]>("list_content_provenance_cmd", { instanceId, kind }),
     ]);
     if (token !== searchToken) return; // a newer search/source-switch superseded this one
     installedByKey = new Map(provenance.map((p) => [resultKey(p.source, p.projectId), p.filename]));
@@ -171,12 +192,12 @@ function scheduleSearch() {
   searchDebounce = setTimeout(() => void runSearch(), 300);
 }
 
-async function removeInstalledMod(key: string, filename: string) {
+async function removeInstalledContent(key: string, filename: string) {
   if (!currentInstanceId || removing.has(key)) return;
   removing.add(key);
   renderResults(lastResults);
   try {
-    await invoke("remove_mod_source_cmd", { instanceId: currentInstanceId, filename });
+    await invoke("remove_content_source_cmd", { instanceId: currentInstanceId, kind: currentKind, filename });
     installedByKey.delete(key);
     await refreshInstanceContent(currentInstanceId);
   } catch (err) {
@@ -201,7 +222,7 @@ async function openDetail(result: ModSearchResult) {
   el.modDetailMetaEl.textContent = `${result.author} · ${result.source}`;
   el.modDetailBodyEl.textContent = "Loading…";
   try {
-    const raw = await invoke<string>("get_mod_description_cmd", { source: result.source, projectId: result.id });
+    const raw = await invoke<string>("get_content_description_cmd", { source: result.source, projectId: result.id });
     if (token !== detailToken) return;
     // Modrinth's `body` is Markdown; CurseForge's is already HTML. Either way it's third-party
     // rich text from a remote source, so it always goes through DOMPurify before touching
@@ -236,8 +257,9 @@ let reviewInstalling = false;
 async function loadReviewRowOptions(row: ReviewRow) {
   if (!currentInstanceId) return;
   try {
-    const versions = await invoke<ModVersionOption[]>("list_mod_versions_cmd", {
+    const versions = await invoke<ModVersionOption[]>("list_content_versions_cmd", {
       instanceId: currentInstanceId,
+      kind: currentKind,
       source: row.result.source,
       projectId: row.result.id,
     });
@@ -265,8 +287,9 @@ async function loadReviewRowPreview(row: ReviewRow) {
   const versionId = row.select.value || undefined;
   row.depsEl.textContent = "Checking…";
   try {
-    const entries = await invoke<ModInstallPreviewEntry[]>("preview_mod_install_cmd", {
+    const entries = await invoke<ModInstallPreviewEntry[]>("preview_content_install_cmd", {
       instanceId: currentInstanceId,
+      kind: currentKind,
       source: row.result.source,
       projectId: row.result.id,
       versionId,
@@ -344,7 +367,7 @@ async function confirmReview() {
   }));
 
   try {
-    await invoke("install_selected_mods_cmd", { instanceId: currentInstanceId, selections });
+    await invoke("install_selected_content_cmd", { instanceId: currentInstanceId, kind: currentKind, selections });
     selected.clear();
     updateReviewButton();
     hideReviewModal();
@@ -364,15 +387,20 @@ async function confirmReview() {
 
 // ---------- modal open/close ----------
 
-export function renderBrowseButton(instance: Instance) {
-  const hasLoader = instance.mod_loader !== null;
+// Only `Mod` needs an installed loader (mods are loader-specific builds) -- Resource Packs' and
+// Shader Packs' own Browse buttons are always enabled, so this only ever toggles the Mods one.
+export function renderModsBrowseButton(hasLoader: boolean) {
   el.modsBrowseBtn.disabled = !hasLoader;
   el.modsBrowseBtn.title = hasLoader ? "" : "Install a mod loader first";
 }
 
-async function openBrowseModsModal(instanceId: string) {
+async function openBrowseContentModal(instanceId: string, kind: ContentKind) {
   currentInstanceId = instanceId;
+  currentKind = kind;
   selectedSource = "Modrinth";
+  const labels = KIND_LABELS[kind];
+  el.browseModsEyebrowEl.textContent = labels.title;
+  el.browseModsQueryInput.placeholder = labels.searchPlaceholder;
   el.browseModsQueryInput.value = "";
   el.browseModsErrorEl.hidden = true;
   el.browseModsResultsEl.replaceChildren();
@@ -396,7 +424,13 @@ function closeBrowseModsModal() {
 export function init() {
   el.modsBrowseBtn.addEventListener("click", () => {
     const instance = state.instances.find((i) => i.id === state.viewingInstanceId);
-    if (instance?.mod_loader) void openBrowseModsModal(instance.id);
+    if (instance?.mod_loader) void openBrowseContentModal(instance.id, "Mod");
+  });
+  el.resourcePacksBrowseBtn.addEventListener("click", () => {
+    if (state.viewingInstanceId) void openBrowseContentModal(state.viewingInstanceId, "ResourcePack");
+  });
+  el.shaderPacksBrowseBtn.addEventListener("click", () => {
+    if (state.viewingInstanceId) void openBrowseContentModal(state.viewingInstanceId, "ShaderPack");
   });
 
   el.modSourceOptions.forEach((btn) => {
@@ -419,7 +453,7 @@ export function init() {
     if (!reviewInstalling) hideReviewModal();
   });
 
-  void listen<DownloadProgress>("mod-install-progress", (event) => {
+  void listen<DownloadProgress>("content-install-progress", (event) => {
     if (!reviewInstalling) return;
     const p = event.payload;
     const phase = p.phase || "Files";

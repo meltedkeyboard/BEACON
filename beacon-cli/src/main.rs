@@ -174,7 +174,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::SearchMods { query, version, loader } => {
             let kind = parse_loader_kind(&loader)?;
-            let results = beacon_core::modsource::modrinth::search(&http, &query, kind, &version, 0).await?;
+            let results =
+                beacon_core::modsource::modrinth::search(&http, beacon_core::modsource::ContentKind::Mod, &query, Some(kind), &version, 0)
+                    .await?;
             for r in &results {
                 println!("{:<24} {:<40} downloads={}", r.id, r.title, r.downloads);
             }
@@ -190,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
                 .as_ref()
                 .map(|l| l.kind)
                 .ok_or_else(|| anyhow::anyhow!("instance '{instance_id}' has no mod loader installed"))?;
-            let versions = beacon_core::modsource::modrinth::list_versions(&http, &project_id, kind, &instance.version_id).await?;
+            let versions = beacon_core::modsource::modrinth::list_versions(&http, &project_id, Some(kind), &instance.version_id).await?;
             for v in &versions {
                 println!("{:<12} {:<24} {}", v.id, v.version_number, v.filename);
             }
@@ -215,13 +217,19 @@ async fn main() -> anyhow::Result<()> {
                 &http,
                 &config,
                 &instance,
+                beacon_core::modsource::ContentKind::Mod,
                 &project_id,
                 version.as_deref(),
-                kind,
+                Some(kind),
                 Some(progress_callback()),
             )
             .await?;
-            beacon_core::instance::record_mod_provenance(&config, &instance, &filename, beacon_core::modsource::ModSource::Modrinth, &project_id)?;
+            beacon_core::instance::record_content_provenance(
+                &instance.mods_dir(&config),
+                &filename,
+                beacon_core::modsource::ModSource::Modrinth,
+                &project_id,
+            )?;
             println!("\ninstalled {filename} into {}", instance.mods_dir(&config).display());
         }
         Command::LoginMicrosoft => {

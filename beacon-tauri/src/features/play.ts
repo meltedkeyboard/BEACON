@@ -9,9 +9,19 @@ import { accountKey, describeError } from "../helpers";
 import { showErrorModal } from "../modals";
 import { currentInstance, state } from "../state";
 import { showTab } from "../tabs";
-import type { DownloadProgress, ScreenshotInfo } from "../types";
+import type { DownloadProgress, LaunchStatusEvent, ScreenshotInfo } from "../types";
 
-let playStage: "idle" | "installing" | "launching" = "idle";
+let playStage: "idle" | "installing" | "launching" | "running" = "idle";
+// The instance id the running/launching game belongs to -- only one instance can be
+// launching/running at a time (enforced backend-side too), but it isn't necessarily
+// `state.selectedInstanceId` if it was started from an instance-detail screen's own Start button
+// rather than the playbar. `features/instance-content.ts`'s Advanced-tab log view and the
+// instance-detail screen's Start/Stop button both read this via `runningInstance()`.
+let runningInstanceId: string | null = null;
+
+export function runningInstance(): string | null {
+  return runningInstanceId;
+}
 let installingLabel = "Installing...";
 let installProgressPercent = 0;
 // Whether any `install-progress` event so far this launch has actually downloaded a file, as
@@ -43,6 +53,11 @@ export function renderPlayButton() {
   if (playStage === "launching") {
     el.playButton.disabled = true;
     el.playLabelEl.textContent = "Launching...";
+    return;
+  }
+  if (playStage === "running") {
+    el.playButton.disabled = true;
+    el.playLabelEl.textContent = "Running...";
     return;
   }
   if (!state.currentAccount) {
@@ -82,6 +97,9 @@ async function handlePlayClick() {
       instanceId: state.selectedInstanceId,
       account: { type: "saved", accountId: accountKey(state.currentAccount) },
     });
+    // `launch_instance_cmd` resolves once the process is spawned, not once it exits -- from here
+    // on, `playStage`'s transition to "running" and eventually back to "idle" is driven entirely
+    // by `launch-status` events instead of this call's own lifetime.
   } catch (err) {
     console.error(err);
     const message = `Couldn't launch: ${describeError(err)}`;
@@ -90,7 +108,6 @@ async function handlePlayClick() {
     el.launchErrorEl.textContent = message;
     el.launchErrorEl.hidden = false;
     showErrorModal(message);
-  } finally {
     playStage = "idle";
     renderPlayButton();
   }
@@ -194,10 +211,15 @@ export async function init(signInRequested: () => void) {
     renderPlayButton();
   });
 
-  await listen<string>("launch-status", (event) => {
-    if (event.payload === "launching" && playStage === "installing") {
-      playStage = "launching";
-      renderPlayButton();
-    }
+  await listen<LaunchStatusEvent>("launch-status", (event) => {
+    const { instanceId, status } = event.payload;
+    // Only one instance can ever be launching/running at a time (enforced backend-side too), and
+    // it isn't necessarily the one the playbar has selected -- it may have been started from that
+    // instance's own detail screen instead. The playbar's Play button still needs to reflect that
+    // globally (disabled while anything is launching/running), so these transitions apply
+    // regardless of which instance triggered them or what `playStage` currently is.
+    playStage = status === "exited" ? "idle" : status;
+    runningInstanceId = status === "exited" ? null : instanceId;
+    renderPlayButton();
   });
 }

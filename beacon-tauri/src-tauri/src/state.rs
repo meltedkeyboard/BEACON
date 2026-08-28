@@ -28,6 +28,21 @@ pub struct AppState {
     /// this cache themselves) or a manual refresh -- there's no reason to treat every tab open as
     /// a reason to ask Mojang again.
     pub skin_profiles: Mutex<HashMap<String, MinecraftProfile>>,
+    /// The currently-running game process, if any -- only one instance can be launched at a time
+    /// (mirrors how the playbar's single Play button already worked), so this is a single slot
+    /// rather than a map. Set by `launch::launch_instance_cmd` right after the process spawns,
+    /// cleared by its reaper task once the process exits. `stop_instance_cmd` reads the pid out of
+    /// here and kills it at the OS level instead of holding onto the `tokio::process::Child`
+    /// itself, which would otherwise need to be shared between the reaper task (which owns it to
+    /// call `.wait()`) and the stop command (which would need `&mut` access to call
+    /// `.start_kill()`) at the same time.
+    pub running: Mutex<Option<RunningGame>>,
+}
+
+#[derive(Clone)]
+pub struct RunningGame {
+    pub instance_id: String,
+    pub pid: u32,
 }
 
 impl AppState {
@@ -38,6 +53,7 @@ impl AppState {
             config_path,
             mc_sessions: Mutex::new(HashMap::new()),
             skin_profiles: Mutex::new(HashMap::new()),
+            running: Mutex::new(None),
         }
     }
 
