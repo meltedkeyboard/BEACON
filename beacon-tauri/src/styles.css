@@ -35,7 +35,7 @@
   --screen-motion: 220ms;
   --backdrop-motion: 800ms ease;
 
-  /* Play tab screenshot background -- set from Settings (main.ts), read by `.hero__backdrop-layer`. */
+  /* Moments tab screenshot background -- set from Settings (main.ts), read by `.hero__backdrop-layer`. */
   --screenshot-blur: 0px;
 }
 
@@ -1325,50 +1325,6 @@ button {
   background: linear-gradient(180deg, var(--bg-app) 0%, transparent 35%);
 }
 
-.hero__placeholder {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  transition: opacity var(--tab-motion);
-}
-
-.hero.has-backdrop .hero__placeholder {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.hero__mark {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.hero__mark-beam {
-  width: 0;
-  height: 0;
-  border-left: 32px solid transparent;
-  border-right: 32px solid transparent;
-  border-bottom: 88px solid var(--beacon);
-}
-
-.hero__mark-base {
-  width: 78px;
-  height: 11px;
-  margin-top: 3px;
-  background: var(--border);
-}
-
-.hero__wordmark {
-  margin: 10px 0 0;
-  font-size: 32px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
 /* ---------- play bar ---------- */
 
 .playbar {
@@ -1704,12 +1660,6 @@ button {
   text-align: left;
 }
 
-/* Browse mods needs room for the two-column list+detail layout below. */
-.modal__panel--browse-mods {
-  width: 760px;
-  max-width: calc(100vw - 80px);
-}
-
 /* CurseForge source hint -- shown only on hover/focus of the button itself, not always visible,
    since the button's own disabled state already communicates "unavailable" at a glance. */
 .mod-source-cf-wrap {
@@ -1741,23 +1691,97 @@ button {
   visibility: visible;
 }
 
-.browse-mods__layout {
-  display: flex;
-  gap: 12px;
+/* ---------- browse mods/resource packs/shader packs (full-screen overlay) ---------- */
+/* Its own body layout, not `.accounts-screen__body`'s single scrolling column -- Settings/Accounts
+   read best as a narrow scrolling list of rows, but this is a two-column search-results/detail
+   split that needs to fill the available height itself and scroll *inside* each column, not scroll
+   the whole page underneath a fixed header. */
+.browse-content-screen__body {
+  flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 40px;
+}
+
+.browse-content-screen__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.browse-content-screen__toolbar .modal__input {
+  flex: 1;
+}
+
+.browse-content-screen__layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+
+/* Column direction, not row -- the error/progress rows (when shown) need the footer's full width,
+   while the Install button only needs to hug the right edge below them. */
+.browse-content-screen__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 40px;
+  border-top: 1px solid var(--border);
+}
+
+.browse-content-screen__footer .modal__btn {
+  align-self: flex-end;
+  flex: none;
+  padding: 12px 24px;
 }
 
 .browse-mods__list {
-  flex: 1 1 300px;
-  max-height: 320px;
+  flex: 1 1 320px;
+  max-height: none;
 }
 
 .mod-detail-pane {
-  flex: 1 1 300px;
-  max-height: 320px;
+  flex: 1 1 340px;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 20px 24px;
   border: 1px solid var(--border);
+}
+
+/* Review & Install column -- mirrors the checkboxes checked in `.browse-mods__list` live (see
+   `addReviewRow`/`removeReviewRow` in content-browser.ts), so there's no separate "Review" step. */
+.review-pane {
+  flex: 1 1 300px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+}
+
+.review-pane .placeholder-text {
+  margin-top: 8px;
+}
+
+.review-pane__list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin-top: 12px;
+  border: none;
+}
+
+/* Stacked instead of `.manage-row`'s usual side-by-side row -- the version `<select>` inherits
+   `.modal__input`'s `width: 100%`, which (as a flex item's preferred main-axis size in a row) fought
+   the name/deps column for the same horizontal space and rendered on top of it. Column direction
+   sidesteps that entirely: width:100% is now a cross-axis size, so it just fills the row's width
+   below the name instead of competing for it. */
+.review-pane__list .manage-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
 
 .mod-detail__title {
@@ -1870,6 +1894,26 @@ button {
   box-shadow: inset 3px 0 0 var(--beacon);
 }
 
+/* Browse mods/resource packs/shader packs results list -- the whole row opens the item in the
+   detail pane (see `renderResultCard`'s click handler), so it needs a pointer cursor like any other
+   clickable row, plus a highlight for whichever one is currently open there (`.is-viewing`, set by
+   `renderResultViewHighlight`) so the open item doesn't get lost while scrolling the list. */
+.manage-row--browse {
+  cursor: pointer;
+}
+
+.manage-row--browse:hover {
+  background: var(--bg-app);
+}
+
+.manage-row--browse.is-viewing {
+  /* A translucent tint of `--beacon` rather than a flat color -- reads as "highlighted" in every
+     theme's own accent color (green in the default theme) without hardcoding a value that clashes
+     with the amber/light themes. */
+  background: color-mix(in srgb, var(--beacon) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--beacon);
+}
+
 /* Column separators for the Mods table -- a thin line centered in the gap before the icon and
    before the name/version cell, so checkbox/icon/name read as table columns rather than a loose
    list. A pseudo-element rather than a border on the cells themselves, since a border on
@@ -1948,6 +1992,47 @@ button {
   color: var(--beacon);
 }
 
+/* Mods table row: checkbox | icon | name+version | source, as actual grid columns instead of the
+   source badge being crammed into the name cell -- source gets its own fixed-width column so it
+   lines up down the table the way a real column would. No trailing actions column here: Mods uses
+   header-level batch delete (see `updateModsDeleteButton`), not a per-row button. */
+.manage-row--mods {
+  display: grid;
+  grid-template-columns: auto 32px 1fr 130px;
+  column-gap: 12px;
+}
+
+/* Resource/Shader Packs table row: icon | name | source | remove button, each its own column.
+   `--packs-no-icon` drops the icon column for Shader Packs, which never has one (see
+   `renderSimpleContentList`'s `showIcon` -- no standard preview-image convention exists for them). */
+.manage-row--packs {
+  display: grid;
+  grid-template-columns: 32px 1fr 130px auto;
+  column-gap: 12px;
+}
+
+.manage-row--packs.manage-row--packs-no-icon {
+  grid-template-columns: 1fr 130px auto;
+}
+
+/* Where a mod/resource pack/shader pack came from -- Modrinth/CurseForge green/orange match each
+   service's own brand color, so the badge reads at a glance without having to read its text.
+   "Unknown" (installed some way other than the content browser) gets the neutral --dim treatment
+   used for `.manage-row__type` elsewhere, not a color implying it belongs to either service. */
+.manage-row__source {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--dim);
+}
+
+.manage-row__source[data-source="Modrinth"] {
+  color: #1bd96a;
+}
+
+.manage-row__source[data-source="CurseForge"] {
+  color: #f16436;
+}
+
 .manage-row__actions {
   display: flex;
   gap: 6px;
@@ -1979,6 +2064,16 @@ button {
   background: var(--danger);
   color: var(--danger-ink);
   border-color: var(--danger);
+}
+
+.manage-row__btn--primary {
+  background: var(--beacon);
+  border-color: var(--beacon-shade);
+  color: var(--beacon-ink);
+}
+
+.manage-row__btn--primary:hover {
+  background: var(--beacon);
 }
 
 .playbar__user {

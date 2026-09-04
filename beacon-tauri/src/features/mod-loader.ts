@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { el } from "../dom";
 import { describeError } from "../helpers";
+import { t } from "../i18n";
 import { openConfirmModal, showErrorModal } from "../modals";
 import { state } from "../state";
 import type { DownloadProgress, Instance, LoaderVersionInfo, ModLoaderKind } from "../types";
@@ -23,8 +24,10 @@ let installing = false;
 
 export function renderLoaderRow(instance: Instance) {
   const loader = instance.mod_loader;
-  el.instanceLoaderNameEl.textContent = loader ? `Mod Loader — ${loader.kind} ${loader.loader_version}` : "Mod Loader — None";
-  el.instanceLoaderInstallBtn.textContent = loader ? "Change…" : "Install…";
+  el.instanceLoaderNameEl.textContent = loader
+    ? t("instances.loaderNamed", { name: `${loader.kind} ${loader.loader_version}` })
+    : t("instances.loaderNone");
+  el.instanceLoaderInstallBtn.textContent = loader ? t("instance.loader.changeEllipsis") : t("instance.loader.installEllipsis");
   el.instanceLoaderRemoveBtn.hidden = !loader;
 }
 

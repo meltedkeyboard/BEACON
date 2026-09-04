@@ -6,6 +6,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { initDom } from "./dom";
+import { applyI18n } from "./i18n";
 import * as accounts from "./features/accounts";
 import * as contentBrowser from "./features/content-browser";
 import * as instanceContent from "./features/instance-content";
@@ -20,6 +21,7 @@ import { loadVersions } from "./versions";
 
 async function main() {
   initDom();
+  applyI18n();
 
   const appWindow = getCurrentWindow();
   document.querySelectorAll<HTMLButtonElement>("[data-window-action]").forEach((button) => {

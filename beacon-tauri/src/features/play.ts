@@ -1,4 +1,4 @@
-// Play button state machine (install/launch), plus the Play-tab screenshot backdrop that shows
+// Play button state machine (install/launch), plus the Moments-tab screenshot backdrop that shows
 // the currently selected instance's own screenshots behind it.
 
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { el } from "../dom";
 import { accountKey, describeError } from "../helpers";
+import { t } from "../i18n";
 import { showErrorModal } from "../modals";
 import { currentInstance, state } from "../state";
 import { showTab } from "../tabs";
@@ -22,7 +23,7 @@ let runningInstanceId: string | null = null;
 export function runningInstance(): string | null {
   return runningInstanceId;
 }
-let installingLabel = "Installing...";
+let installingLabel = "";
 let installProgressPercent = 0;
 // Whether any `install-progress` event so far this launch has actually downloaded a file, as
 // opposed to just re-verifying files that were already there -- most launches download nothing at
@@ -42,7 +43,7 @@ export function renderPlayButton() {
 
   if (playStage === "installing") {
     el.playButton.disabled = true;
-    el.playLabelEl.textContent = installingHasDownloads ? "Installing..." : "Checking...";
+    el.playLabelEl.textContent = installingHasDownloads ? t("play.installing") : t("play.checking");
     el.progressPanelEl.hidden = false;
     el.progressLabelEl.textContent = installingLabel;
     el.progressPercentEl.textContent = `${Math.round(installProgressPercent)}%`;
@@ -52,26 +53,26 @@ export function renderPlayButton() {
   el.progressPanelEl.hidden = true;
   if (playStage === "launching") {
     el.playButton.disabled = true;
-    el.playLabelEl.textContent = "Launching...";
+    el.playLabelEl.textContent = t("play.launching");
     return;
   }
   if (playStage === "running") {
     el.playButton.disabled = true;
-    el.playLabelEl.textContent = "Running...";
+    el.playLabelEl.textContent = t("play.running");
     return;
   }
   if (!state.currentAccount) {
     el.playButton.disabled = false;
-    el.playLabelEl.textContent = "Sign In";
+    el.playLabelEl.textContent = t("play.signIn");
     return;
   }
   if (!state.selectedInstanceId) {
     el.playButton.disabled = false;
-    el.playLabelEl.textContent = state.instances.length === 0 ? "New instance" : "Select an instance";
+    el.playLabelEl.textContent = state.instances.length === 0 ? t("play.newInstance") : t("play.selectInstance");
     return;
   }
   el.playButton.disabled = false;
-  el.playLabelEl.textContent = "Play";
+  el.playLabelEl.textContent = t("play.play");
 }
 
 async function handlePlayClick() {
@@ -87,7 +88,7 @@ async function handlePlayClick() {
 
   el.launchErrorEl.hidden = true;
   playStage = "installing";
-  installingLabel = "Checking files...";
+  installingLabel = t("play.checkingFiles");
   installProgressPercent = 0;
   installingHasDownloads = false;
   renderPlayButton();
@@ -102,7 +103,7 @@ async function handlePlayClick() {
     // by `launch-status` events instead of this call's own lifetime.
   } catch (err) {
     console.error(err);
-    const message = `Couldn't launch: ${describeError(err)}`;
+    const message = t("play.launchFailedPrefix", { message: describeError(err) });
     // The inline bar is easy to miss (small, below the fold if the window's short) -- a modal
     // guarantees the user actually sees why Play didn't work instead of wondering if it's stuck.
     el.launchErrorEl.textContent = message;
@@ -205,7 +206,7 @@ export async function init(signInRequested: () => void) {
     // "Downloading" when `downloaded_done` never leaves 0 is just wrong: nothing was downloaded,
     // Beacon was only checking what's already on disk.
     if (p.downloaded_done > 0) installingHasDownloads = true;
-    const verb = installingHasDownloads ? "Downloading" : "Checking";
+    const verb = installingHasDownloads ? t("play.downloading") : t("play.checkingVerb");
     installingLabel = p.files_total > 0 ? `${verb} ${phase} (${p.files_done}/${p.files_total})` : `${verb} ${phase}`;
     installProgressPercent = p.files_total > 0 ? Math.min(100, (p.files_done / p.files_total) * 100) : 0;
     renderPlayButton();

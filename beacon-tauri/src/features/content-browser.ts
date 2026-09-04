@@ -1,12 +1,18 @@
-// "Browse mods/resource packs/shader packs…" modal, shared by all three of the instance-detail
-// screen's own tabs -- search Modrinth (always available) or CurseForge (only once the user has
-// pasted their own API key in Settings -- see that file's own header comment for why Beacon can't
-// ship a shared key). Checkboxes select items to install; "Review & Install" opens a table showing
-// exactly which version of each (plus, Modrinth mods only, which dependencies it brings in) will be
-// downloaded, changeable via a dropdown, before anything actually happens -- the whole point being
-// visibility into what "compatible version" the backend picked, instead of a silent one-click
-// auto-install. One modal instance is reused for all three content kinds (see `KIND_LABELS`)
-// instead of tripling the HTML/CSS/JS for what's otherwise an identical flow.
+// "Browse mods/resource packs/shader packs…" full-screen overlay, shared by all three of the
+// instance-detail screen's own tabs -- search Modrinth (always available) or CurseForge (only once
+// the user has pasted their own API key in Settings -- see that file's own header comment for why
+// Beacon can't ship a shared key). Three columns: search results (checkboxes select items to
+// install) | detail pane (the selected result's own description) | review column, which mirrors the
+// checked items live and shows exactly which version of each (plus, Modrinth mods only, which
+// dependencies it brings in) will be downloaded, changeable via a dropdown, before anything actually
+// happens -- the whole point being visibility into what "compatible version" the backend picked,
+// instead of a silent one-click auto-install. One screen instance is reused for all three content
+// kinds (see `KIND_LABELS`) instead of tripling the HTML/CSS/JS for what's otherwise an identical
+// flow. It's a full-screen overlay rather than a modal because a three-column layout needs real
+// width and height to not feel cramped -- it opens *over* the instance-detail screen (not via
+// `closeAllScreens`) so Back returns to the instance still in place, and `instances.ts`'s
+// `closeInstanceDetail` closes it too so it can't linger open (with a stale `currentInstanceId`)
+// once its parent screen is gone.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -15,10 +21,12 @@ import { marked } from "marked";
 
 import { el } from "../dom";
 import { describeError } from "../helpers";
+import { t } from "../i18n";
 import { openConfirmModal } from "../modals";
 import { state } from "../state";
 import type {
   ContentKind,
+  ContentUpdateView,
   DownloadProgress,
   ModInstallPreviewEntry,
   ModProvenanceEntry,
@@ -28,21 +36,28 @@ import type {
 } from "../types";
 import { refreshInstanceContent } from "./instance-content";
 
-const KIND_LABELS: Record<ContentKind, { noun: string; title: string; searchPlaceholder: string; emptyText: string }> = {
-  Mod: { noun: "mod", title: "Browse mods", searchPlaceholder: "Search mods…", emptyText: "No mods found." },
-  ResourcePack: {
-    noun: "resource pack",
-    title: "Browse resource packs",
-    searchPlaceholder: "Search resource packs…",
-    emptyText: "No resource packs found.",
-  },
-  ShaderPack: {
-    noun: "shader pack",
-    title: "Browse shader packs",
-    searchPlaceholder: "Search shader packs…",
-    emptyText: "No shader packs found.",
-  },
-};
+// Built from `t()` at call time (not a module-level constant) so it always reflects whatever
+// language is active right now, including one switched mid-session.
+function kindLabels(kind: ContentKind): { noun: string; title: string; searchPlaceholder: string; emptyText: string } {
+  switch (kind) {
+    case "Mod":
+      return { noun: t("modContent.noun.mod"), title: t("modContent.title.mod"), searchPlaceholder: t("modContent.placeholder.mod"), emptyText: t("modContent.empty.mod") };
+    case "ResourcePack":
+      return {
+        noun: t("modContent.noun.resourcePack"),
+        title: t("modContent.title.resourcePack"),
+        searchPlaceholder: t("modContent.placeholder.resourcePack"),
+        emptyText: t("modContent.empty.resourcePack"),
+      };
+    case "ShaderPack":
+      return {
+        noun: t("modContent.noun.shaderPack"),
+        title: t("modContent.title.shaderPack"),
+        searchPlaceholder: t("modContent.placeholder.shaderPack"),
+        emptyText: t("modContent.empty.shaderPack"),
+      };
+  }
+}
 
 function resultKey(source: ModSource, id: string): string {
   return `${source}:${id}`;
@@ -57,7 +72,11 @@ let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 let lastResults: ModSearchResult[] = [];
 let installedByKey = new Map<string, string>(); // resultKey -> filename
 const selected = new Map<string, ModSearchResult>(); // resultKey -> result, survives a re-search
+let viewingKey: string | null = null; // resultKey currently shown in the detail pane, for the highlight
 let removing = new Set<string>();
+let updatingKeys = new Set<string>();
+let updatesByKey = new Map<string, ContentUpdateView>(); // resultKey -> available update, empty until "Check for updates" runs
+let checkingUpdates = false;
 
 // ---------- source picker ----------
 
@@ -78,14 +97,16 @@ function renderSourceOptions() {
 // ---------- result list ----------
 
 function updateReviewButton() {
-  el.browseModsReviewBtn.textContent = `Review & Install (${selected.size})`;
+  el.browseModsReviewBtn.textContent = t("modContent.installedFmt", { count: selected.size });
   el.browseModsReviewBtn.disabled = selected.size === 0;
 }
 
 function renderResultCard(result: ModSearchResult): HTMLElement {
   const key = resultKey(result.source, result.id);
   const row = document.createElement("div");
-  row.className = "manage-row";
+  row.className = "manage-row manage-row--browse";
+  row.dataset.resultKey = key;
+  row.classList.toggle("is-viewing", key === viewingKey);
 
   const installedFilename = installedByKey.get(key);
   if (!installedFilename) {
@@ -95,8 +116,13 @@ function renderResultCard(result: ModSearchResult): HTMLElement {
     checkbox.checked = selected.has(key);
     checkbox.addEventListener("click", (e) => e.stopPropagation());
     checkbox.addEventListener("change", () => {
-      if (checkbox.checked) selected.set(key, result);
-      else selected.delete(key);
+      if (checkbox.checked) {
+        selected.set(key, result);
+        addReviewRow(key, result);
+      } else {
+        selected.delete(key);
+        removeReviewRow(key);
+      }
       updateReviewButton();
     });
     row.appendChild(checkbox);
@@ -124,16 +150,30 @@ function renderResultCard(result: ModSearchResult): HTMLElement {
   row.addEventListener("click", () => void openDetail(result));
 
   if (installedFilename) {
+    const update = updatesByKey.get(key);
+    if (update) {
+      const updateBtn = document.createElement("button");
+      updateBtn.type = "button";
+      updateBtn.className = "manage-row__btn manage-row__btn--primary";
+      updateBtn.textContent = updatingKeys.has(key) ? t("modContent.updating") : t("modContent.updateTo", { version: update.latestVersionNumber });
+      updateBtn.disabled = updatingKeys.has(key);
+      updateBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void updateInstalledContent(key, update);
+      });
+      row.appendChild(updateBtn);
+    }
+
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "manage-row__btn manage-row__btn--danger";
-    removeBtn.textContent = removing.has(key) ? "Removing…" : "Remove";
-    removeBtn.disabled = removing.has(key);
+    removeBtn.textContent = removing.has(key) ? t("modContent.removing") : t("common.remove");
+    removeBtn.disabled = removing.has(key) || updatingKeys.has(key);
     removeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       openConfirmModal(
-        `Remove ${KIND_LABELS[currentKind].noun}?`,
-        `This permanently deletes "${installedFilename}". This can't be undone.`,
+        t("modContent.removeConfirm", { noun: kindLabels(currentKind).noun }),
+        t("modContent.removeBody", { filename: installedFilename }),
         () => void removeInstalledContent(key, installedFilename),
       );
     });
@@ -149,7 +189,7 @@ function renderResults(results: ModSearchResult[]) {
   if (results.length === 0) {
     const empty = document.createElement("p");
     empty.className = "placeholder-text";
-    empty.textContent = KIND_LABELS[currentKind].emptyText;
+    empty.textContent = kindLabels(currentKind).emptyText;
     el.browseModsResultsEl.appendChild(empty);
     return;
   }
@@ -210,11 +250,71 @@ async function removeInstalledContent(key: string, filename: string) {
   }
 }
 
+async function updateInstalledContent(key: string, update: ContentUpdateView) {
+  if (!currentInstanceId || updatingKeys.has(key)) return;
+  updatingKeys.add(key);
+  renderResults(lastResults);
+  try {
+    await invoke("update_content_cmd", {
+      instanceId: currentInstanceId,
+      kind: currentKind,
+      source: update.source,
+      projectId: update.projectId,
+      oldFilename: update.filename,
+      versionId: update.latestVersionId,
+    });
+    updatesByKey.delete(key);
+    await Promise.all([runSearch(), refreshInstanceContent(currentInstanceId)]);
+  } catch (err) {
+    console.error(err);
+    el.browseModsErrorEl.textContent = describeError(err);
+    el.browseModsErrorEl.hidden = false;
+  } finally {
+    updatingKeys.delete(key);
+    renderResults(lastResults);
+  }
+}
+
+// Checks every installed item (across the whole instance, not just what's currently in view) for a
+// newer compatible build -- kept separate from `runSearch` since it's a slower, opt-in check (one
+// extra version-lookup request per installed item) rather than something to redo on every keystroke.
+async function checkForUpdates() {
+  if (!currentInstanceId || checkingUpdates) return;
+  checkingUpdates = true;
+  el.browseModsCheckUpdatesBtn.disabled = true;
+  el.browseModsCheckUpdatesBtn.textContent = t("modContent.checking");
+  el.browseModsErrorEl.hidden = true;
+  const instanceId = currentInstanceId;
+  const kind = currentKind;
+  try {
+    const updates = await invoke<ContentUpdateView[]>("check_content_updates_cmd", { instanceId, kind });
+    if (instanceId !== currentInstanceId || kind !== currentKind) return; // navigated/switched kind while this was in flight
+    updatesByKey = new Map(updates.map((u) => [resultKey(u.source, u.projectId), u]));
+    renderResults(lastResults);
+  } catch (err) {
+    console.error(err);
+    el.browseModsErrorEl.textContent = describeError(err);
+    el.browseModsErrorEl.hidden = false;
+  } finally {
+    checkingUpdates = false;
+    el.browseModsCheckUpdatesBtn.disabled = false;
+    el.browseModsCheckUpdatesBtn.textContent = t("browseContent.checkUpdates");
+  }
+}
+
 // ---------- detail pane ----------
 
 let detailToken = 0;
 
+function renderResultViewHighlight() {
+  el.browseModsResultsEl.querySelectorAll<HTMLElement>(".manage-row--browse").forEach((row) => {
+    row.classList.toggle("is-viewing", row.dataset.resultKey === viewingKey);
+  });
+}
+
 async function openDetail(result: ModSearchResult) {
+  viewingKey = resultKey(result.source, result.id);
+  renderResultViewHighlight();
   const token = ++detailToken;
   el.modDetailPlaceholderEl.hidden = true;
   el.modDetailContentEl.hidden = false;
@@ -239,20 +339,26 @@ async function openDetail(result: ModSearchResult) {
 
 function resetDetailPane() {
   detailToken++;
+  viewingKey = null;
   el.modDetailPlaceholderEl.hidden = false;
   el.modDetailContentEl.hidden = true;
 }
 
-// ---------- review & install ----------
+// ---------- review & install (third column, live-synced with the checkboxes in the results list) ----------
 
 interface ReviewRow {
   result: ModSearchResult;
   select: HTMLSelectElement;
   depsEl: HTMLElement;
+  el: HTMLElement;
 }
 
-let reviewRows: ReviewRow[] = [];
+let reviewRows = new Map<string, ReviewRow>(); // resultKey -> row, mirrors `selected`
 let reviewInstalling = false;
+
+function renderReviewPlaceholder() {
+  el.reviewModsPlaceholderEl.hidden = reviewRows.size > 0;
+}
 
 async function loadReviewRowOptions(row: ReviewRow) {
   if (!currentInstanceId) return;
@@ -285,7 +391,7 @@ async function loadReviewRowOptions(row: ReviewRow) {
 async function loadReviewRowPreview(row: ReviewRow) {
   if (!currentInstanceId) return;
   const versionId = row.select.value || undefined;
-  row.depsEl.textContent = "Checking…";
+  row.depsEl.textContent = t("modContent.checking");
   try {
     const entries = await invoke<ModInstallPreviewEntry[]>("preview_content_install_cmd", {
       instanceId: currentInstanceId,
@@ -295,14 +401,18 @@ async function loadReviewRowPreview(row: ReviewRow) {
       versionId,
     });
     const deps = entries.filter((e) => e.is_dependency);
-    row.depsEl.textContent = deps.length > 0 ? `Brings in: ${deps.map((d) => `${d.title} ${d.version_number}`).join(", ")}` : "";
+    row.depsEl.textContent = deps.length > 0 ? t("modContent.bringsIn", { list: deps.map((d) => `${d.title} ${d.version_number}`).join(", ") }) : "";
   } catch (err) {
     console.error(err);
     row.depsEl.textContent = describeError(err);
   }
 }
 
-function renderReviewRow(result: ModSearchResult): ReviewRow {
+// Adds one row to the review column -- called the moment a result's checkbox is checked, not
+// batched behind an explicit "Review" step, so the column always reflects the current selection.
+function addReviewRow(key: string, result: ModSearchResult) {
+  if (reviewRows.has(key)) return;
+
   const row = document.createElement("div");
   row.className = "manage-row";
 
@@ -321,27 +431,28 @@ function renderReviewRow(result: ModSearchResult): ReviewRow {
   row.append(info, select);
   el.reviewModsListEl.appendChild(row);
 
-  const reviewRow: ReviewRow = { result, select, depsEl };
+  const reviewRow: ReviewRow = { result, select, depsEl, el: row };
+  reviewRows.set(key, reviewRow);
+  renderReviewPlaceholder();
   select.addEventListener("change", () => void loadReviewRowPreview(reviewRow));
-  return reviewRow;
+  void loadReviewRowOptions(reviewRow);
 }
 
-function openReviewModal() {
+function removeReviewRow(key: string) {
+  const row = reviewRows.get(key);
+  if (!row) return;
+  row.el.remove();
+  reviewRows.delete(key);
+  renderReviewPlaceholder();
+}
+
+// Wipes the whole review column -- used when the browse screen opens fresh (a new instance/kind)
+// or right after a successful install, not on every selection change (see `removeReviewRow` for
+// that, which only ever touches the one row being unchecked).
+function clearReviewRows() {
   el.reviewModsListEl.replaceChildren();
-  el.reviewModsErrorEl.hidden = true;
-  el.reviewModsProgressEl.hidden = true;
-  el.reviewModsConfirmBtn.disabled = false;
-  el.reviewModsConfirmBtn.textContent = "Install";
-  el.reviewModsCancelBtn.disabled = false;
-
-  reviewRows = Array.from(selected.values()).map(renderReviewRow);
-  for (const row of reviewRows) void loadReviewRowOptions(row);
-
-  el.reviewModsModalEl.classList.add("is-open");
-}
-
-function hideReviewModal() {
-  el.reviewModsModalEl.classList.remove("is-open");
+  reviewRows = new Map();
+  renderReviewPlaceholder();
 }
 
 function renderReviewProgress(label: string, percent: number) {
@@ -352,15 +463,14 @@ function renderReviewProgress(label: string, percent: number) {
 }
 
 async function confirmReview() {
-  if (reviewInstalling || !currentInstanceId || reviewRows.length === 0) return;
+  if (reviewInstalling || !currentInstanceId || reviewRows.size === 0) return;
   reviewInstalling = true;
-  el.reviewModsConfirmBtn.disabled = true;
-  el.reviewModsConfirmBtn.textContent = "Installing…";
-  el.reviewModsCancelBtn.disabled = true;
+  el.browseModsReviewBtn.disabled = true;
+  el.browseModsReviewBtn.textContent = "Installing…";
   el.reviewModsErrorEl.hidden = true;
-  renderReviewProgress("Starting…", 0);
+  renderReviewProgress(t("modContent.startingInstall"), 0);
 
-  const selections = reviewRows.map((row) => ({
+  const selections = Array.from(reviewRows.values()).map((row) => ({
     source: row.result.source,
     projectId: row.result.id,
     versionId: row.select.value || null,
@@ -369,8 +479,7 @@ async function confirmReview() {
   try {
     await invoke("install_selected_content_cmd", { instanceId: currentInstanceId, kind: currentKind, selections });
     selected.clear();
-    updateReviewButton();
-    hideReviewModal();
+    clearReviewRows();
     await Promise.all([runSearch(), refreshInstanceContent(currentInstanceId)]);
   } catch (err) {
     console.error(err);
@@ -379,32 +488,32 @@ async function confirmReview() {
   } finally {
     reviewInstalling = false;
     el.reviewModsProgressEl.hidden = true;
-    el.reviewModsConfirmBtn.disabled = false;
-    el.reviewModsConfirmBtn.textContent = "Install";
-    el.reviewModsCancelBtn.disabled = false;
+    updateReviewButton();
   }
 }
 
-// ---------- modal open/close ----------
+// ---------- screen open/close ----------
 
 // Only `Mod` needs an installed loader (mods are loader-specific builds) -- Resource Packs' and
 // Shader Packs' own Browse buttons are always enabled, so this only ever toggles the Mods one.
 export function renderModsBrowseButton(hasLoader: boolean) {
   el.modsBrowseBtn.disabled = !hasLoader;
-  el.modsBrowseBtn.title = hasLoader ? "" : "Install a mod loader first";
+  el.modsBrowseBtn.title = hasLoader ? "" : t("instance.mods.needLoader");
 }
 
 async function openBrowseContentModal(instanceId: string, kind: ContentKind) {
   currentInstanceId = instanceId;
   currentKind = kind;
   selectedSource = "Modrinth";
-  const labels = KIND_LABELS[kind];
+  const labels = kindLabels(kind);
   el.browseModsEyebrowEl.textContent = labels.title;
   el.browseModsQueryInput.placeholder = labels.searchPlaceholder;
   el.browseModsQueryInput.value = "";
   el.browseModsErrorEl.hidden = true;
   el.browseModsResultsEl.replaceChildren();
   selected.clear();
+  updatesByKey = new Map();
+  clearReviewRows();
   updateReviewButton();
   resetDetailPane();
   try {
@@ -413,12 +522,12 @@ async function openBrowseContentModal(instanceId: string, kind: ContentKind) {
     hasCurseForgeKey = false;
   }
   renderSourceOptions();
-  el.browseModsModalEl.classList.add("is-open");
+  el.browseContentScreenEl.classList.add("is-open");
   void runSearch();
 }
 
-function closeBrowseModsModal() {
-  el.browseModsModalEl.classList.remove("is-open");
+export function closeBrowseContentScreen() {
+  el.browseContentScreenEl.classList.remove("is-open");
 }
 
 export function init() {
@@ -445,13 +554,9 @@ export function init() {
   });
 
   el.browseModsQueryInput.addEventListener("input", scheduleSearch);
-  el.browseModsCloseBtn.addEventListener("click", closeBrowseModsModal);
-  el.browseModsReviewBtn.addEventListener("click", openReviewModal);
-
-  el.reviewModsConfirmBtn.addEventListener("click", () => void confirmReview());
-  el.reviewModsCancelBtn.addEventListener("click", () => {
-    if (!reviewInstalling) hideReviewModal();
-  });
+  el.browseModsBackBtn.addEventListener("click", closeBrowseContentScreen);
+  el.browseModsReviewBtn.addEventListener("click", () => void confirmReview());
+  el.browseModsCheckUpdatesBtn.addEventListener("click", () => void checkForUpdates());
 
   void listen<DownloadProgress>("content-install-progress", (event) => {
     if (!reviewInstalling) return;

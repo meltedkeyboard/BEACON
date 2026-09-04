@@ -220,6 +220,113 @@ pub async fn remove_content_source_cmd(state: State<'_, AppState>, instance_id: 
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentUpdateView {
+    source: modsource::ModSource,
+    project_id: String,
+    filename: String,
+    latest_version_id: String,
+    latest_version_number: String,
+    latest_filename: String,
+}
+
+/// For every installed item this instance has provenance for (see `list_content_provenance_cmd`),
+/// asks the source what its newest compatible build is and reports the ones where that build's
+/// filename doesn't match what's actually on disk -- there's no stored "installed version id" to
+/// compare against directly, so a filename mismatch is what stands in for "out of date" (the same
+/// signal `install`'s own naming already gives every other build). An item whose version lookup
+/// fails outright (project pulled from the source, transient network error) is silently skipped
+/// rather than failing the whole batch -- one broken project shouldn't hide updates for the rest.
+#[tauri::command]
+pub async fn check_content_updates_cmd(state: State<'_, AppState>, instance_id: String, kind: String) -> Result<Vec<ContentUpdateView>, CoreError> {
+    let kind = parse_kind(&kind)?;
+    let config = state.config.lock().await.clone();
+    let instance = config
+        .find_instance(&instance_id)
+        .cloned()
+        .ok_or_else(|| CoreError::Other(format!("no instance '{instance_id}'")))?;
+    let loader = loader_for(&instance, kind)?;
+    let curseforge_key = secret_store::load_curseforge_api_key().await?;
+    let dir = kind.dir(&config, &instance);
+
+    let mut updates = Vec::new();
+    for (filename, entry) in load_content_provenance(&dir) {
+        let api_key = if entry.source == modsource::ModSource::CurseForge { curseforge_key.as_deref() } else { None };
+        let Ok(versions) = modsource::list_versions(&state.http, entry.source, &entry.project_id, loader, &instance.version_id, api_key).await else {
+            continue;
+        };
+        let Some(latest) = versions.iter().find(|v| v.is_stable).or_else(|| versions.first()) else { continue };
+        if latest.filename != filename {
+            updates.push(ContentUpdateView {
+                source: entry.source,
+                project_id: entry.project_id,
+                filename,
+                latest_version_id: latest.id.clone(),
+                latest_version_number: latest.version_number.clone(),
+                latest_filename: latest.filename.clone(),
+            });
+        }
+    }
+    Ok(updates)
+}
+
+/// Downloads `version_id` (a `ContentUpdateView.latest_version_id` from `check_content_updates_cmd`)
+/// in place of `old_filename`, then re-records provenance under the new filename -- same
+/// install-then-record shape as `install_selected_content_cmd`, just for one item, plus the extra
+/// step of deleting the superseded file once the new one is safely down.
+#[tauri::command]
+pub async fn update_content_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    kind: String,
+    source: String,
+    project_id: String,
+    old_filename: String,
+    version_id: String,
+) -> Result<(), CoreError> {
+    let kind = parse_kind(&kind)?;
+    let source = parse_source(&source)?;
+    let config = state.config.lock().await.clone();
+    let instance = config
+        .find_instance(&instance_id)
+        .cloned()
+        .ok_or_else(|| CoreError::Other(format!("no instance '{instance_id}'")))?;
+    let loader = loader_for(&instance, kind)?;
+    let curseforge_key = secret_store::load_curseforge_api_key().await?;
+    let api_key = if source == modsource::ModSource::CurseForge { curseforge_key.as_deref() } else { None };
+    let dest_dir = kind.dir(&config, &instance);
+
+    let progress_app = app.clone();
+    let on_progress: ProgressCallback = Arc::new(move |progress: DownloadProgress| {
+        let _ = progress_app.emit("content-install-progress", progress);
+    });
+    let new_filename = modsource::install(
+        &state.http,
+        &config,
+        &instance,
+        source,
+        kind,
+        &project_id,
+        Some(version_id.as_str()),
+        loader,
+        api_key,
+        Some(on_progress),
+    )
+    .await?;
+
+    if new_filename != old_filename {
+        match kind {
+            ContentKind::Mod => delete_mod(&config, &instance, &old_filename)?,
+            ContentKind::ResourcePack => beacon_core::instance::delete_resource_pack(&config, &instance, &old_filename)?,
+            ContentKind::ShaderPack => beacon_core::instance::delete_shader_pack(&config, &instance, &old_filename)?,
+        }
+    }
+    record_content_provenance(&dest_dir, &new_filename, source, &project_id)?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_curseforge_api_key_cmd(key: Option<String>) -> Result<(), CoreError> {
     match key.filter(|k| !k.trim().is_empty()) {

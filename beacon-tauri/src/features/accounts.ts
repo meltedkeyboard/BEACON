@@ -7,6 +7,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { el } from "../dom";
 import { accountKey, describeError } from "../helpers";
+import { t } from "../i18n";
 import { closeAllScreens, showErrorModal } from "../modals";
 import { state } from "../state";
 import type { Account, DeviceAuthorization } from "../types";
@@ -20,14 +21,14 @@ let offlineModalMode: { kind: "add" } | { kind: "rename"; accountId: string; cur
 export function renderAccount() {
   if (state.currentAccount) {
     el.accountNameEl.textContent = state.currentAccount.username;
-    el.accountStatusEl.textContent = "Connected";
+    el.accountStatusEl.textContent = t("account.connected");
     el.accountStatusEl.className = "account__status account__status--connected";
     el.playbarUserEl.textContent = state.currentAccount.username;
   } else {
-    el.accountNameEl.textContent = "Sign in";
-    el.accountStatusEl.textContent = "Offline mode";
+    el.accountNameEl.textContent = t("account.signin");
+    el.accountStatusEl.textContent = t("account.offline");
     el.accountStatusEl.className = "account__status";
-    el.playbarUserEl.textContent = "Not signed in";
+    el.playbarUserEl.textContent = t("playbar.notSignedIn");
   }
   play.renderPlayButton();
   // Account switches (sign-in, reorder in the account menu) change what the Skins tab should
@@ -103,7 +104,7 @@ let signInInProgress = false;
 export async function startSignIn() {
   if (signInInProgress) return;
   signInInProgress = true;
-  el.accountStatusEl.textContent = "Connecting...";
+  el.accountStatusEl.textContent = t("account.connecting");
   el.accountStatusEl.className = "account__status";
   try {
     state.currentAccount = await invoke<Account>("login_microsoft_cmd");
@@ -112,7 +113,7 @@ export async function startSignIn() {
   } catch (err) {
     console.error(err);
     hideLoginModal();
-    el.accountStatusEl.textContent = "Connection failed. Please log in again.";
+    el.accountStatusEl.textContent = t("account.connectionFailed");
     el.accountStatusEl.className = "account__status account__status--error";
     showErrorModal(describeError(err));
   } finally {

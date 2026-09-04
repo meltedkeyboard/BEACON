@@ -107,6 +107,15 @@ export interface ModProvenanceEntry {
   filename: string;
 }
 
+export interface ContentUpdateView {
+  source: ModSource;
+  projectId: string;
+  filename: string;
+  latestVersionId: string;
+  latestVersionNumber: string;
+  latestFilename: string;
+}
+
 export interface WorldInfo {
   name: string;
   datapacks: string[];

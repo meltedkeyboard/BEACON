@@ -13,9 +13,11 @@ export const state = {
   selectedInstanceId: null as string | null,
   viewingInstanceId: null as string | null,
   directorySettings: null as DirectorySettings | null,
-  // Play-tab-background and "show snapshots" are per-device settings (owned/persisted by
-  // `settings.ts`), but `play.ts` and `versions.ts` respectively need to read the current value.
+  // Moments-tab-enabled, Moments-tab-background, and "show snapshots" are per-device settings
+  // (owned/persisted by `settings.ts`), but `play.ts`/`tabs.ts`/`versions.ts` respectively need to
+  // read the current value.
   showSnapshots: false,
+  momentsTabEnabled: false,
   screenshotsBgEnabled: true,
   screenshotsBgBlur: 6,
 };

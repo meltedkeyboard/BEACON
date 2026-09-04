@@ -1,4 +1,4 @@
-// Tab switching (Play / Installations / Skins / Patch notes) and the cosmetic sidebar-selection
+// Tab switching (Moments / Installations / Skins / Patch notes) and the cosmetic sidebar-selection
 // highlight. Owns `showTab` in its own module (rather than main.ts) specifically so
 // `features/play.ts` can call it too (clicking Play with no instance selected jumps to the
 // Installations tab) without a circular import between main.ts and play.ts.
@@ -23,7 +23,7 @@ export function initTabs() {
   panels = document.querySelectorAll<HTMLElement>("[data-tab-panel]");
 
   tabs.forEach((tab) => {
-    tab.addEventListener("click", () => showTab(tab.dataset.tab ?? "play"));
+    tab.addEventListener("click", () => showTab(tab.dataset.tab ?? "installations"));
   });
 
   // Accounts/Settings are one-off navigations (they open a fullscreen screen), not a

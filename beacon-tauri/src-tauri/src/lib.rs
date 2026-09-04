@@ -137,6 +137,8 @@ pub fn run() {
             content_browser::install_selected_content_cmd,
             content_browser::list_content_provenance_cmd,
             content_browser::remove_content_source_cmd,
+            content_browser::check_content_updates_cmd,
+            content_browser::update_content_cmd,
             content_browser::set_curseforge_api_key_cmd,
             content_browser::has_curseforge_api_key_cmd,
             settings::get_directory_settings,

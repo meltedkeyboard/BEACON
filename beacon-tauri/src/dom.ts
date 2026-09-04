@@ -38,6 +38,9 @@ export interface ElRefs {
   settingsBackBtn: HTMLButtonElement;
   snapshotsToggle: HTMLButtonElement;
   snapshotsToggleLabel: HTMLElement;
+  momentsTabBtn: HTMLButtonElement;
+  momentsTabToggle: HTMLButtonElement;
+  momentsTabToggleLabel: HTMLElement;
   screenshotsBgToggle: HTMLButtonElement;
   screenshotsBgToggleLabel: HTMLElement;
   screenshotsBgBlurInput: HTMLInputElement;
@@ -50,6 +53,7 @@ export interface ElRefs {
   configDirPathEl: HTMLElement;
   configDirOpenBtn: HTMLButtonElement;
   themeOptions: NodeListOf<HTMLButtonElement>;
+  languageOptions: NodeListOf<HTMLButtonElement>;
   skinsSigninEl: HTMLElement;
   skinsSigninBtn: HTMLButtonElement;
   skinsViewEl: HTMLElement;
@@ -132,7 +136,7 @@ export interface ElRefs {
   installLoaderConfirmBtn: HTMLButtonElement;
   installLoaderCancelBtn: HTMLButtonElement;
   modsBrowseBtn: HTMLButtonElement;
-  browseModsModalEl: HTMLElement;
+  browseContentScreenEl: HTMLElement;
   browseModsEyebrowEl: HTMLElement;
   modSourceOptions: NodeListOf<HTMLButtonElement>;
   modSourceCurseForgeBtn: HTMLButtonElement;
@@ -140,23 +144,22 @@ export interface ElRefs {
   browseModsHintEl: HTMLElement;
   browseModsResultsEl: HTMLElement;
   browseModsErrorEl: HTMLElement;
-  browseModsCloseBtn: HTMLButtonElement;
+  browseModsBackBtn: HTMLButtonElement;
   browseModsReviewBtn: HTMLButtonElement;
+  browseModsCheckUpdatesBtn: HTMLButtonElement;
   modDetailPaneEl: HTMLElement;
   modDetailPlaceholderEl: HTMLElement;
   modDetailContentEl: HTMLElement;
   modDetailTitleEl: HTMLElement;
   modDetailMetaEl: HTMLElement;
   modDetailBodyEl: HTMLElement;
-  reviewModsModalEl: HTMLElement;
+  reviewModsPlaceholderEl: HTMLElement;
   reviewModsListEl: HTMLElement;
   reviewModsErrorEl: HTMLElement;
   reviewModsProgressEl: HTMLElement;
   reviewModsProgressLabelEl: HTMLElement;
   reviewModsProgressPercentEl: HTMLElement;
   reviewModsProgressFillEl: HTMLElement;
-  reviewModsConfirmBtn: HTMLButtonElement;
-  reviewModsCancelBtn: HTMLButtonElement;
   curseforgeKeyStatusEl: HTMLElement;
   curseforgeKeyInput: HTMLInputElement;
   curseforgeKeySaveBtn: HTMLButtonElement;
@@ -227,6 +230,9 @@ export function initDom() {
     settingsBackBtn: q("#settings-back"),
     snapshotsToggle: q("#snapshots-toggle"),
     snapshotsToggleLabel: q("#snapshots-toggle-label"),
+    momentsTabBtn: q("#moments-tab-btn"),
+    momentsTabToggle: q("#moments-tab-toggle"),
+    momentsTabToggleLabel: q("#moments-tab-toggle-label"),
     screenshotsBgToggle: q("#screenshots-bg-toggle"),
     screenshotsBgToggleLabel: q("#screenshots-bg-toggle-label"),
     screenshotsBgBlurInput: q("#screenshots-bg-blur"),
@@ -238,7 +244,8 @@ export function initDom() {
     instancesDirBrowseBtn: q("#instances-dir-browse"),
     configDirPathEl: q("#config-dir-path"),
     configDirOpenBtn: q("#config-dir-open"),
-    themeOptions: document.querySelectorAll<HTMLButtonElement>(".theme-option"),
+    themeOptions: document.querySelectorAll<HTMLButtonElement>("#theme-picker .theme-option"),
+    languageOptions: document.querySelectorAll<HTMLButtonElement>("#language-picker .theme-option"),
     skinsSigninEl: q("#skins-signin"),
     skinsSigninBtn: q("#skins-signin-btn"),
     skinsViewEl: q("#skins-view"),
@@ -321,7 +328,7 @@ export function initDom() {
     installLoaderConfirmBtn: q("#install-loader-confirm"),
     installLoaderCancelBtn: q("#install-loader-cancel"),
     modsBrowseBtn: q("#mods-browse-btn"),
-    browseModsModalEl: q("#browse-mods-modal"),
+    browseContentScreenEl: q("#browse-content-screen"),
     browseModsEyebrowEl: q("#browse-mods-eyebrow"),
     modSourceOptions: document.querySelectorAll<HTMLButtonElement>("#mod-source-options .skin-variant__option"),
     modSourceCurseForgeBtn: q("#mod-source-curseforge"),
@@ -329,23 +336,22 @@ export function initDom() {
     browseModsHintEl: q("#browse-mods-hint"),
     browseModsResultsEl: q("#browse-mods-results"),
     browseModsErrorEl: q("#browse-mods-error"),
-    browseModsCloseBtn: q("#browse-mods-close"),
+    browseModsBackBtn: q("#browse-mods-back"),
     browseModsReviewBtn: q("#browse-mods-review-btn"),
+    browseModsCheckUpdatesBtn: q("#browse-mods-check-updates-btn"),
     modDetailPaneEl: q("#mod-detail-pane"),
     modDetailPlaceholderEl: q("#mod-detail-placeholder"),
     modDetailContentEl: q("#mod-detail-content"),
     modDetailTitleEl: q("#mod-detail-title"),
     modDetailMetaEl: q("#mod-detail-meta"),
     modDetailBodyEl: q("#mod-detail-body"),
-    reviewModsModalEl: q("#review-mods-modal"),
+    reviewModsPlaceholderEl: q("#review-mods-placeholder"),
     reviewModsListEl: q("#review-mods-list"),
     reviewModsErrorEl: q("#review-mods-error"),
     reviewModsProgressEl: q("#review-mods-progress"),
     reviewModsProgressLabelEl: q("#review-mods-progress-label"),
     reviewModsProgressPercentEl: q("#review-mods-progress-percent"),
     reviewModsProgressFillEl: q("#review-mods-progress-fill"),
-    reviewModsConfirmBtn: q("#review-mods-confirm"),
-    reviewModsCancelBtn: q("#review-mods-cancel"),
     curseforgeKeyStatusEl: q("#curseforge-key-status"),
     curseforgeKeyInput: q("#curseforge-key-input"),
     curseforgeKeySaveBtn: q("#curseforge-key-save"),

@@ -8,18 +8,33 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { el } from "../dom";
 import { describeError, openFolder } from "../helpers";
+import { t } from "../i18n";
 import { loadInstances } from "./instances";
 import { openConfirmModal, showErrorModal } from "../modals";
 import { state } from "../state";
-import type { ModInfo, ResourcePackInfo, ScreenshotInfo, WorldInfo } from "../types";
+import type { ModInfo, ModProvenanceEntry, ModSource, ResourcePackInfo, ScreenshotInfo, WorldInfo } from "../types";
 
-// Shared by Resource Packs (has a real `pack.png`-derived icon) and Shader Packs (no equivalent
-// standard convention exists, so it's always passed `icon_data_url: null` -- a blank icon slot,
-// same as any mod/world/instance with no icon set, not a fabricated placeholder).
+// Text label shown next to a mod/resource pack/shader pack's name for where it came from --
+// `undefined` means it was never installed through the content browser (dropped in manually, or
+// predates provenance tracking), shown as "Unknown" rather than left blank so it reads as a
+// deliberate "we don't know" instead of a missing value.
+function renderSourceLabel(source: ModSource | undefined): HTMLElement {
+  const label = document.createElement("span");
+  label.className = "manage-row__source";
+  label.dataset.source = source ?? "Unknown";
+  label.textContent = source ?? t("modContent.source.unknown");
+  return label;
+}
+
+// Shared by Resource Packs (has a real `pack.png`-derived icon, `showIcon: true`) and Shader
+// Packs (no equivalent standard convention exists for a preview image, so `showIcon: false` skips
+// the icon slot entirely rather than rendering a permanently-blank one).
 function renderSimpleContentList(
   container: HTMLElement,
   items: { name: string; icon_data_url: string | null }[],
   emptyText: string,
+  showIcon: boolean,
+  sourceByFilename: Map<string, ModSource>,
   onDelete: (name: string) => void,
 ) {
   container.replaceChildren();
@@ -32,23 +47,29 @@ function renderSimpleContentList(
   }
   for (const item of items) {
     const row = document.createElement("div");
-    row.className = "manage-row";
+    row.className = showIcon ? "manage-row manage-row--packs" : "manage-row manage-row--packs manage-row--packs-no-icon";
 
-    const icon = document.createElement("span");
-    icon.className = "manage-row__icon";
-    if (item.icon_data_url) icon.style.backgroundImage = `url("${item.icon_data_url}")`;
-
+    const info = document.createElement("div");
+    info.className = "manage-row__info";
     const nameSpan = document.createElement("span");
     nameSpan.className = "manage-row__name";
     nameSpan.textContent = item.name;
+    info.appendChild(nameSpan);
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "manage-row__btn manage-row__btn--danger";
-    removeBtn.textContent = "Remove";
+    removeBtn.textContent = t("common.remove");
     removeBtn.addEventListener("click", () => onDelete(item.name));
 
-    row.append(icon, nameSpan, removeBtn);
+    if (showIcon) {
+      const icon = document.createElement("span");
+      icon.className = "manage-row__icon";
+      if (item.icon_data_url) icon.style.backgroundImage = `url("${item.icon_data_url}")`;
+      row.append(icon, info, renderSourceLabel(sourceByFilename.get(item.name)), removeBtn);
+    } else {
+      row.append(info, renderSourceLabel(sourceByFilename.get(item.name)), removeBtn);
+    }
     container.appendChild(row);
   }
 }
@@ -58,7 +79,7 @@ function renderWorlds(instanceId: string, worlds: WorldInfo[]) {
   if (worlds.length === 0) {
     const empty = document.createElement("p");
     empty.className = "placeholder-text";
-    empty.textContent = "No worlds yet.";
+    empty.textContent = t("instance.worlds.empty");
     el.worldsListEl.appendChild(empty);
     return;
   }
@@ -87,12 +108,10 @@ function renderWorlds(instanceId: string, worlds: WorldInfo[]) {
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "manage-row__btn manage-row__btn--danger";
-    removeBtn.textContent = "Remove";
+    removeBtn.textContent = t("common.remove");
     removeBtn.addEventListener("click", () => {
-      openConfirmModal(
-        "Delete world?",
-        `This permanently deletes "${world.name}". This can't be undone.`,
-        () => void deleteWorld(instanceId, world.name),
+      openConfirmModal(t("confirm.deleteWorld.title"), t("confirm.deleteFilePrefix", { name: world.name }), () =>
+        void deleteWorld(instanceId, world.name),
       );
     });
 
@@ -129,7 +148,7 @@ let modOrder: string[] = []; // last-rendered order, for Shift+click range selec
 
 function updateModsDeleteButton() {
   el.modsDeleteBtn.disabled = selectedMods.size === 0;
-  el.modsDeleteBtn.textContent = selectedMods.size > 0 ? `Delete (${selectedMods.size})` : "Delete";
+  el.modsDeleteBtn.textContent = selectedMods.size > 0 ? t("instance.mods.deleteFmt", { count: selectedMods.size }) : t("instance.mods.delete");
 }
 
 function renderModSelectionHighlight() {
@@ -158,7 +177,7 @@ function handleModRowClick(event: MouseEvent, name: string) {
   renderModSelectionHighlight();
 }
 
-function renderMods(instanceId: string, mods: ModInfo[]) {
+function renderMods(instanceId: string, mods: ModInfo[], sourceByFilename: Map<string, ModSource>) {
   el.modsListEl.replaceChildren();
   modOrder = mods.map((m) => m.name);
   // A mod that was selected but no longer appears (deleted, disabled-toggled away by some other
@@ -169,13 +188,13 @@ function renderMods(instanceId: string, mods: ModInfo[]) {
   if (mods.length === 0) {
     const empty = document.createElement("p");
     empty.className = "placeholder-text";
-    empty.textContent = "No mods yet.";
+    empty.textContent = t("instance.mods.empty");
     el.modsListEl.appendChild(empty);
     return;
   }
   for (const mod of mods) {
     const row = document.createElement("div");
-    row.className = "manage-row manage-row--selectable";
+    row.className = "manage-row manage-row--selectable manage-row--mods";
     row.dataset.modName = mod.name;
     row.classList.toggle("is-selected", selectedMods.has(mod.name));
 
@@ -203,8 +222,7 @@ function renderMods(instanceId: string, mods: ModInfo[]) {
       version.textContent = mod.version;
       info.appendChild(version);
     }
-
-    row.append(checkbox, icon, info);
+    row.append(checkbox, icon, info, renderSourceLabel(sourceByFilename.get(mod.name)));
     row.addEventListener("click", (e) => handleModRowClick(e, mod.name));
     el.modsListEl.appendChild(row);
   }
@@ -229,7 +247,7 @@ function renderScreenshotGrid(instanceId: string, screenshots: ScreenshotInfo[],
   if (screenshots.length === 0) {
     const empty = document.createElement("p");
     empty.className = "placeholder-text";
-    empty.textContent = "No screenshots yet.";
+    empty.textContent = t("instance.screenshots.empty");
     el.screenshotsGridEl.appendChild(empty);
     return;
   }
@@ -244,14 +262,14 @@ function renderScreenshotGrid(instanceId: string, screenshots: ScreenshotInfo[],
     pinBtn.type = "button";
     pinBtn.className = "screenshot-card__btn screenshot-card__pin";
     pinBtn.textContent = "★";
-    pinBtn.title = isPinned ? "Unpin" : "Pin as Play tab background";
+    pinBtn.title = isPinned ? t("common.unpin") : t("common.pinAsMomentsBg");
     pinBtn.addEventListener("click", () => void togglePinScreenshot(instanceId, isPinned ? null : screenshot.name));
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "screenshot-card__btn screenshot-card__remove";
     removeBtn.textContent = "×";
-    removeBtn.title = "Remove";
+    removeBtn.title = t("common.remove");
     removeBtn.addEventListener("click", () => void deleteScreenshotAction(instanceId, screenshot.name));
 
     card.append(pinBtn, removeBtn);
@@ -285,32 +303,44 @@ async function deleteScreenshotAction(instanceId: string, name: string) {
 
 export async function refreshInstanceContent(instanceId: string) {
   try {
-    const [mods, worlds, resourcePacks, shaderPacks, screenshots] = await Promise.all([
-      invoke<ModInfo[]>("list_mods_cmd", { instanceId }),
-      invoke<WorldInfo[]>("list_worlds_cmd", { instanceId }),
-      invoke<ResourcePackInfo[]>("list_resource_packs_cmd", { instanceId }),
-      invoke<string[]>("list_shader_packs_cmd", { instanceId }),
-      invoke<ScreenshotInfo[]>("list_screenshots_cmd", { instanceId }),
-    ]);
+    const [mods, worlds, resourcePacks, shaderPacks, screenshots, modProvenance, resourcePackProvenance, shaderPackProvenance] =
+      await Promise.all([
+        invoke<ModInfo[]>("list_mods_cmd", { instanceId }),
+        invoke<WorldInfo[]>("list_worlds_cmd", { instanceId }),
+        invoke<ResourcePackInfo[]>("list_resource_packs_cmd", { instanceId }),
+        invoke<string[]>("list_shader_packs_cmd", { instanceId }),
+        invoke<ScreenshotInfo[]>("list_screenshots_cmd", { instanceId }),
+        invoke<ModProvenanceEntry[]>("list_content_provenance_cmd", { instanceId, kind: "Mod" }),
+        invoke<ModProvenanceEntry[]>("list_content_provenance_cmd", { instanceId, kind: "ResourcePack" }),
+        invoke<ModProvenanceEntry[]>("list_content_provenance_cmd", { instanceId, kind: "ShaderPack" }),
+      ]);
     if (state.viewingInstanceId !== instanceId) return; // navigated away while this was in flight
-    renderMods(instanceId, mods);
+    const modSourceByFilename = new Map(modProvenance.map((p) => [p.filename, p.source]));
+    const resourcePackSourceByFilename = new Map(resourcePackProvenance.map((p) => [p.filename, p.source]));
+    const shaderPackSourceByFilename = new Map(shaderPackProvenance.map((p) => [p.filename, p.source]));
+    renderMods(instanceId, mods, modSourceByFilename);
     renderWorlds(instanceId, worlds);
-    renderSimpleContentList(el.resourcePacksListEl, resourcePacks, "No resource packs yet.", (fileName) => {
-      openConfirmModal(
-        "Delete resource pack?",
-        `This permanently deletes "${fileName}". This can't be undone.`,
-        () => void deleteResourcePack(instanceId, fileName),
-      );
-    });
+    renderSimpleContentList(
+      el.resourcePacksListEl,
+      resourcePacks,
+      t("instance.resourcePacks.empty"),
+      true,
+      resourcePackSourceByFilename,
+      (fileName) => {
+        openConfirmModal(t("confirm.deleteResourcePack.title"), t("confirm.deleteFilePrefix", { name: fileName }), () =>
+          void deleteResourcePack(instanceId, fileName),
+        );
+      },
+    );
     renderSimpleContentList(
       el.shaderPacksListEl,
       shaderPacks.map((name) => ({ name, icon_data_url: null })),
-      "No shader packs yet.",
+      t("instance.shaderPacks.empty"),
+      false,
+      shaderPackSourceByFilename,
       (fileName) => {
-        openConfirmModal(
-          "Delete shader pack?",
-          `This permanently deletes "${fileName}". This can't be undone.`,
-          () => void deleteShaderPack(instanceId, fileName),
+        openConfirmModal(t("confirm.deleteShaderPack.title"), t("confirm.deleteFilePrefix", { name: fileName }), () =>
+          void deleteShaderPack(instanceId, fileName),
         );
       },
     );
@@ -394,9 +424,9 @@ export function init() {
     const names = Array.from(selectedMods);
     const message =
       names.length === 1
-        ? `This permanently deletes "${names[0]}". This can't be undone.`
-        : `This permanently deletes ${names.length} mods: ${names.join(", ")}. This can't be undone.`;
-    openConfirmModal("Delete mods?", message, () => void deleteSelectedMods(instanceId, names));
+        ? t("confirm.deleteModsBody.single", { name: names[0] })
+        : t("confirm.deleteModsBody.multi", { count: names.length, names: names.join(", ") });
+    openConfirmModal(t("confirm.deleteMods.title"), message, () => void deleteSelectedMods(instanceId, names));
   });
 
   el.modsOpenFolderBtn.addEventListener("click", () => {

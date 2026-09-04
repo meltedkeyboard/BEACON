@@ -1,5 +1,6 @@
-// Settings screen: theme, "show snapshots" toggle, Play-tab-background toggle+blur, directory
-// relocation (game_dir/instances_dir), and wipe-all-data.
+// Settings screen: theme, "show snapshots" toggle, Moments-tab visibility toggle,
+// Moments-tab-background toggle+blur, directory relocation (game_dir/instances_dir), and
+// wipe-all-data.
 
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -7,8 +8,10 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { el } from "../dom";
 import { describeError, openFolder, setPathText } from "../helpers";
+import { getLang, setLang, t, type Lang } from "../i18n";
 import { closeAllScreens, showErrorModal } from "../modals";
 import { state } from "../state";
+import { showTab } from "../tabs";
 import type { DirectorySettings } from "../types";
 import { loadVersions } from "../versions";
 import * as play from "./play";
@@ -20,6 +23,17 @@ function openSettingsScreen() {
 
 function closeSettingsScreen() {
   el.settingsScreenEl.classList.remove("is-open");
+}
+
+// ---------- language ----------
+
+function renderLanguagePicker() {
+  const lang = getLang();
+  el.languageOptions.forEach((option) => {
+    const selected = option.dataset.lang === lang;
+    option.classList.toggle("is-selected", selected);
+    option.setAttribute("aria-checked", String(selected));
+  });
 }
 
 // ---------- theme ----------
@@ -93,10 +107,42 @@ function writeShowSnapshots(value: boolean) {
 function renderSnapshotsToggle() {
   el.snapshotsToggle.classList.toggle("is-on", state.showSnapshots);
   el.snapshotsToggle.setAttribute("aria-checked", String(state.showSnapshots));
-  el.snapshotsToggleLabel.textContent = state.showSnapshots ? "On" : "Off";
+  el.snapshotsToggleLabel.textContent = state.showSnapshots ? t("toggle.on") : t("toggle.off");
 }
 
-// ---------- Play tab screenshot background ----------
+// ---------- Moments tab ----------
+// Off by default -- Installations is the default tab (see the `is-active` classes in index.html);
+// this only reveals the Moments nav button, it doesn't switch to it.
+
+const MOMENTS_TAB_ENABLED_KEY = "beacon:moments-tab-enabled";
+
+function readMomentsTabEnabled(): boolean {
+  try {
+    return localStorage.getItem(MOMENTS_TAB_ENABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeMomentsTabEnabled(value: boolean) {
+  try {
+    localStorage.setItem(MOMENTS_TAB_ENABLED_KEY, value ? "1" : "0");
+  } catch {
+    // Best-effort, same as the other settings here.
+  }
+}
+
+function renderMomentsTabToggle() {
+  el.momentsTabToggle.classList.toggle("is-on", state.momentsTabEnabled);
+  el.momentsTabToggle.setAttribute("aria-checked", String(state.momentsTabEnabled));
+  el.momentsTabToggleLabel.textContent = state.momentsTabEnabled ? t("toggle.on") : t("toggle.off");
+  el.momentsTabBtn.hidden = !state.momentsTabEnabled;
+  // Turning it off while Moments is the active tab would otherwise leave a hidden nav button
+  // looking selected and its panel still showing -- fall back to Installations, the default tab.
+  if (!state.momentsTabEnabled && el.momentsTabBtn.classList.contains("is-active")) showTab("installations");
+}
+
+// ---------- Moments tab screenshot background ----------
 // Purely cosmetic, per-device preferences -- same localStorage treatment as the theme and
 // snapshots toggle above, not config.json (that's reserved for data tied to the instance
 // itself, like which screenshot is pinned).
@@ -142,7 +188,7 @@ function writeScreenshotsBgBlur(value: number) {
 function renderScreenshotsBgSettings() {
   el.screenshotsBgToggle.classList.toggle("is-on", state.screenshotsBgEnabled);
   el.screenshotsBgToggle.setAttribute("aria-checked", String(state.screenshotsBgEnabled));
-  el.screenshotsBgToggleLabel.textContent = state.screenshotsBgEnabled ? "On" : "Off";
+  el.screenshotsBgToggleLabel.textContent = state.screenshotsBgEnabled ? t("toggle.on") : t("toggle.off");
   el.screenshotsBgBlurInput.disabled = !state.screenshotsBgEnabled;
   el.screenshotsBgBlurInput.value = String(state.screenshotsBgBlur);
   document.documentElement.style.setProperty("--screenshot-blur", `${state.screenshotsBgBlur}px`);
@@ -168,9 +214,9 @@ export async function loadDirectorySettings() {
     setPathText(el.configDirPathEl, settings.config_dir);
   } catch (err) {
     console.error(err);
-    el.gameDirPathEl.textContent = "Unknown";
-    el.instancesDirPathEl.textContent = "Unknown";
-    el.configDirPathEl.textContent = "Unknown";
+    el.gameDirPathEl.textContent = t("settings.unknown");
+    el.instancesDirPathEl.textContent = t("settings.unknown");
+    el.configDirPathEl.textContent = t("settings.unknown");
   }
 }
 
@@ -192,7 +238,7 @@ async function relocateDirectory(
   directoriesBusy = true;
   renderDirectoriesBusyState();
   const originalLabel = browseBtn.textContent;
-  browseBtn.textContent = "Moving...";
+  browseBtn.textContent = t("settings.moving");
   try {
     const newPath = await invoke<string>(command, { newPath: picked });
     setPathText(pathEl, newPath);
@@ -218,7 +264,7 @@ const CURSEFORGE_KEY_REQUEST_URL = "https://console.curseforge.com/";
 async function refreshCurseForgeKeyStatus() {
   try {
     const hasKey = await invoke<boolean>("has_curseforge_api_key_cmd");
-    el.curseforgeKeyStatusEl.textContent = hasKey ? "Key set." : "Not set.";
+    el.curseforgeKeyStatusEl.textContent = hasKey ? t("settings.curseforge.set") : t("settings.curseforge.notSet");
   } catch (err) {
     console.error(err);
   }
@@ -259,7 +305,7 @@ const WIPE_CONFIRM_WORD = "WIPE";
 function openWipeModal() {
   el.wipeConfirmInput.value = "";
   el.wipeConfirmBtn.disabled = true;
-  el.wipeConfirmBtn.textContent = "Wipe everything";
+  el.wipeConfirmBtn.textContent = t("wipe.confirm");
   el.wipeCancelBtn.disabled = false;
   el.wipeModalEl.classList.add("is-open");
   el.wipeConfirmInput.focus();
@@ -273,7 +319,7 @@ async function performWipe() {
   if (el.wipeConfirmInput.value.trim().toUpperCase() !== WIPE_CONFIRM_WORD) return;
   el.wipeConfirmBtn.disabled = true;
   el.wipeCancelBtn.disabled = true;
-  el.wipeConfirmBtn.textContent = "Wiping...";
+  el.wipeConfirmBtn.textContent = t("wipe.wiping");
   try {
     // On success the backend deletes everything and exits the whole process -- this call
     // never resolves, so there's nothing to handle after it.
@@ -287,11 +333,29 @@ async function performWipe() {
 
 export function init() {
   state.showSnapshots = readShowSnapshots();
+  state.momentsTabEnabled = readMomentsTabEnabled();
   state.screenshotsBgEnabled = readScreenshotsBgEnabled();
   state.screenshotsBgBlur = readScreenshotsBgBlur();
 
   el.settingsNavBtn.addEventListener("click", openSettingsScreen);
   el.settingsBackBtn.addEventListener("click", closeSettingsScreen);
+
+  el.languageOptions.forEach((option) => {
+    option.addEventListener("click", () => {
+      const lang = option.dataset.lang;
+      if (!lang || (lang !== "en" && lang !== "ru") || lang === getLang()) return;
+      setLang(lang as Lang);
+      renderLanguagePicker();
+      // `setLang` re-fills every `data-i18n`-tagged element, but the toggle labels and
+      // CurseForge key status below are plain dynamic text (their value depends on state, not
+      // just the language), so they need their own re-render to pick up the new language too.
+      renderSnapshotsToggle();
+      renderMomentsTabToggle();
+      renderScreenshotsBgSettings();
+      void refreshCurseForgeKeyStatus();
+    });
+  });
+  renderLanguagePicker();
 
   el.themeOptions.forEach((option) => {
     option.addEventListener("click", () => {
@@ -311,6 +375,13 @@ export function init() {
     void loadVersions();
   });
   renderSnapshotsToggle();
+
+  el.momentsTabToggle.addEventListener("click", () => {
+    state.momentsTabEnabled = !state.momentsTabEnabled;
+    writeMomentsTabEnabled(state.momentsTabEnabled);
+    renderMomentsTabToggle();
+  });
+  renderMomentsTabToggle();
 
   el.screenshotsBgToggle.addEventListener("click", () => {
     state.screenshotsBgEnabled = !state.screenshotsBgEnabled;

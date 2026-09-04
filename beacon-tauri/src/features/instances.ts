@@ -9,6 +9,7 @@ import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plug
 
 import { el } from "../dom";
 import { accountKey, applyDecorativeIcon, describeError, instanceIconBackground, openFolder } from "../helpers";
+import { t } from "../i18n";
 import { closeAllScreens, openConfirmModal, showErrorModal } from "../modals";
 import { currentInstance, state } from "../state";
 import type { Instance, InstancesResponse, LaunchStatusEvent } from "../types";
@@ -25,8 +26,8 @@ function renderInstancePickerTrigger() {
   el.playbarInstanceNameEl.textContent = current
     ? current.name
     : state.instances.length === 0
-      ? "No instances"
-      : "Select instance";
+      ? t("instances.playbar.noInstances")
+      : t("instances.picker.selectInstance");
   el.playbarInstanceVersionEl.textContent = current ? current.version_id : "—";
   applyDecorativeIcon(el.instancePickerIconEl, current);
 }
@@ -36,7 +37,7 @@ function renderInstancePickerList() {
   if (state.instances.length === 0) {
     const empty = document.createElement("p");
     empty.className = "placeholder-text";
-    empty.textContent = "No instances yet.";
+    empty.textContent = t("instances.picker.emptyList");
     el.instancePickerListEl.appendChild(empty);
     return;
   }
@@ -88,7 +89,7 @@ function renderInstanceGrid() {
   if (state.instances.length === 0) {
     const empty = document.createElement("p");
     empty.className = "placeholder-text";
-    empty.textContent = "No instances yet. Create one to get started.";
+    empty.textContent = t("instances.grid.empty");
     el.instanceGridEl.appendChild(empty);
     return;
   }
@@ -366,6 +367,11 @@ export function openInstanceDetail(instanceId: string) {
 
 function closeInstanceDetail() {
   el.instanceScreenEl.classList.remove("is-open");
+  // Browse mods/resource packs/shader packs opens *over* this screen (not through
+  // `closeAllScreens`, so Back on it returns here) rather than being closed by it -- closing this
+  // screen has to take that overlay down too, or it'd linger open with a `currentInstanceId` for
+  // an instance the user has since navigated away from.
+  el.browseContentScreenEl.classList.remove("is-open");
   state.viewingInstanceId = null;
 }
 
@@ -378,7 +384,7 @@ function renderInstanceDetail() {
   el.instanceScreenTitleEl.textContent = instance.name;
   el.instanceDetailNameEl.textContent = instance.name;
   el.instanceDetailVersionEl.textContent = instance.version_id;
-  el.instanceVersionNameEl.textContent = `Minecraft ${instance.version_id}`;
+  el.instanceVersionNameEl.textContent = t("instances.versionPrefix", { version: instance.version_id });
   el.instanceIconBtn.style.backgroundImage = instanceIconBackground(instance);
   modLoader.renderLoaderRow(instance);
   contentBrowser.renderModsBrowseButton(instance.mod_loader !== null);
@@ -575,10 +581,6 @@ export function init() {
   el.instanceDeleteBtn.addEventListener("click", () => {
     const instance = state.instances.find((i) => i.id === state.viewingInstanceId);
     if (!instance) return;
-    openConfirmModal(
-      "Delete instance?",
-      `This permanently deletes "${instance.name}" -- its worlds and everything else in its folder. This can't be undone.`,
-      () => void deleteInstance(instance.id),
-    );
+    openConfirmModal(t("deleteInstance.title"), t("instances.deleteBody", { name: instance.name }), () => void deleteInstance(instance.id));
   });
 }
