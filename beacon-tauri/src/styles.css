@@ -382,7 +382,7 @@ button {
 
 .settings-row--danger .modal__btn {
   flex: none;
-  padding: 10px 20px;
+  --btn-pad-x: 20px;
 }
 
 .settings-row__path {
@@ -404,7 +404,7 @@ button {
 
 .settings-row__path-actions .modal__btn {
   flex: none;
-  padding: 8px 16px;
+  --btn-pad-x: 16px;
   font-size: 13px;
 }
 
@@ -546,7 +546,7 @@ button {
 
 .instance-detail__top-actions .modal__btn {
   flex: none;
-  padding: 10px 18px;
+  --btn-pad-x: 18px;
 }
 
 .instance-detail__icon {
@@ -593,7 +593,7 @@ button {
 
 .instance-detail__actions .modal__btn {
   flex: none;
-  padding: 10px 18px;
+  --btn-pad-x: 18px;
 }
 
 .content-section__title {
@@ -625,7 +625,7 @@ button {
 .content-section__header .modal__btn,
 .content-section__header-actions .modal__btn {
   flex: none;
-  padding: 8px 16px;
+  --btn-pad-x: 16px;
   font-size: 13px;
 }
 
@@ -645,7 +645,7 @@ button {
 
 .instances-view__toolbar .modal__btn {
   flex: none;
-  padding: 12px 24px;
+  --btn-pad-x: 24px;
 }
 
 .instance-grid {
@@ -1549,7 +1549,7 @@ button {
   box-shadow:
     0 -6px 0 0 rgba(0, 0, 0, 0.35) inset,
     2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
-    -2px -8px 0 0 rgba(0, 0, 0, 0.25) inset;
+    -2px -4px 0 0 rgba(0, 0, 0, 0.25) inset;
   mix-blend-mode: hard-light;
   transition: background-color 0.1s, box-shadow 0.1s;
 }
@@ -1683,11 +1683,24 @@ button {
    a raised 3D edge over whatever color sits underneath -- panel, accent or danger red alike --
    without a separate bevel rule per variant). Pressing swaps the bevel to look sunken and nudges
    the label down/right by the same amount the padding grew, instead of moving the whole button,
-   so it can't shove neighbouring buttons around in a `gap`-based row. */
+   so it can't shove neighbouring buttons around in a `gap`-based row.
+
+   Vertical padding is derived from `--btn-pad-y`/`--btn-raise`/`--btn-press` instead of being a
+   literal `padding` value, specifically so every context that needs a tighter/wider button (see
+   the many `.some-context .modal__btn { --btn-pad-x: ... }` rules below) only ever touches
+   `--btn-pad-x` -- a custom property has no shorthand to collide with, so it can't accidentally
+   clobber the top/bottom halves of this animation the way overriding `padding` outright used to
+   (that was the actual bug behind several "this button's animation is broken" reports: a
+   same-specificity `padding: Npx Mpx` in a later/earlier rule silently ate the raised-text and
+   press-down effect for just that one button). */
 .modal__btn {
+  --btn-pad-x: 0px;
+  --btn-pad-y: 12px;
+  --btn-raise: 3px;
+  --btn-press: 4px;
   position: relative;
   flex: 1;
-  padding: 9px 0 15px;
+  padding: calc(var(--btn-pad-y) - var(--btn-raise)) var(--btn-pad-x) calc(var(--btn-pad-y) + var(--btn-raise));
   background: var(--panel);
   border: 2px solid var(--border);
   color: var(--ink);
@@ -1704,14 +1717,14 @@ button {
   box-shadow:
     0 -6px 0 0 rgba(0, 0, 0, 0.35) inset,
     2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
-    -2px -8px 0 0 rgba(0, 0, 0, 0.25) inset;
+    -2px -4px 0 0 rgba(0, 0, 0, 0.25) inset;
   mix-blend-mode: hard-light;
   transition: background-color 0.1s, box-shadow 0.1s;
 }
 
 .modal__btn:active {
-  padding-top: 13px;
-  padding-bottom: 11px;
+  padding-top: calc(var(--btn-pad-y) - var(--btn-raise) + var(--btn-press));
+  padding-bottom: calc(var(--btn-pad-y) + var(--btn-raise) - var(--btn-press));
 }
 
 .modal__btn:active::after {
@@ -1792,7 +1805,7 @@ button {
   box-shadow:
     0 -6px 0 0 rgba(0, 0, 0, 0.35) inset,
     2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
-    -2px -8px 0 0 rgba(0, 0, 0, 0.25) inset;
+    -2px -4px 0 0 rgba(0, 0, 0, 0.25) inset;
   mix-blend-mode: hard-light;
   transition: box-shadow 0.1s;
 }
@@ -1901,7 +1914,7 @@ button {
 .browse-content-screen__footer .modal__btn {
   align-self: flex-end;
   flex: none;
-  padding: 12px 24px;
+  --btn-pad-x: 24px;
 }
 
 .browse-mods__list {
