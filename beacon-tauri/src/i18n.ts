@@ -37,6 +37,8 @@ const en: Dict = {
 
   "skins.signinBody": "Sign in with a Microsoft account to manage skins and capes.",
   "skins.signinBtn": "Sign in with Microsoft",
+  "skins.loadBody": "Beacon only talks to Microsoft's auth servers when you ask it to, to avoid hammering them -- load your skins and capes now?",
+  "skins.loadBtn": "Load skins",
   "skins.variant.classic": "Classic",
   "skins.variant.slim": "Slim",
   "skins.upload": "Upload skin…",
@@ -243,6 +245,11 @@ const en: Dict = {
   "instances.loaderNamed": "Mod Loader — {name}",
   "instances.versionPrefix": "Minecraft {version}",
   "instances.deleteBody": "This permanently deletes \"{name}\" -- its worlds and everything else in its folder. This can't be undone.",
+  "instances.contextMenu.open": "Open",
+  "instances.contextMenu.rename": "Rename…",
+  "instances.contextMenu.openFolder": "Open folder",
+  "instances.contextMenu.export": "Export…",
+  "instances.contextMenu.delete": "Delete…",
 
   "modContent.updateTo": "Update to {version}",
   "modContent.updating": "Updating…",
@@ -307,6 +314,8 @@ const ru: Dict = {
 
   "skins.signinBody": "Войдите через аккаунт Microsoft, чтобы управлять скинами и плащами.",
   "skins.signinBtn": "Войти через Microsoft",
+  "skins.loadBody": "Beacon обращается к серверам авторизации Microsoft только по вашей команде, чтобы их не перегружать -- загрузить скины и плащи сейчас?",
+  "skins.loadBtn": "Загрузить скины",
   "skins.variant.classic": "Классическая",
   "skins.variant.slim": "Тонкая",
   "skins.upload": "Загрузить скин…",
@@ -513,6 +522,11 @@ const ru: Dict = {
   "instances.loaderNamed": "Загрузчик модов — {name}",
   "instances.versionPrefix": "Minecraft {version}",
   "instances.deleteBody": "Это безвозвратно удалит «{name}» -- её миры и всё остальное содержимое папки. Отменить нельзя.",
+  "instances.contextMenu.open": "Открыть",
+  "instances.contextMenu.rename": "Переименовать…",
+  "instances.contextMenu.openFolder": "Открыть папку",
+  "instances.contextMenu.export": "Экспортировать…",
+  "instances.contextMenu.delete": "Удалить…",
 
   "modContent.updateTo": "Обновить до {version}",
   "modContent.updating": "Обновление…",

@@ -31,11 +31,10 @@ export function renderAccount() {
     el.playbarUserEl.textContent = t("playbar.notSignedIn");
   }
   play.renderPlayButton();
-  // Account switches (sign-in, reorder in the account menu) change what the Skins tab should
-  // show -- but only bother refetching if it's actually the tab on screen right now.
-  if (document.querySelector('[data-tab-panel="skins"]')?.classList.contains("is-active")) {
-    void skins.loadSkinsTab();
-  }
+  // Account switches (sign-in, reorder in the account menu) can change whether the Skins tab
+  // should show sign-in / load-prompt / cached-view -- but never triggers a fetch by itself (see
+  // `skins.ts`'s `loadedForAccountId` doc comment for why).
+  skins.renderSkinsTabState();
 }
 
 function openAccountMenu() {

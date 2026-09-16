@@ -747,7 +747,8 @@ button {
 
 /* ---------- skins tab ---------- */
 
-.skins-signin {
+.skins-signin,
+.skins-load {
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -760,8 +761,13 @@ button {
 /* `[hidden]` and this rule's own `display: flex` are equal-specificity selectors -- without this
    the later one in the cascade would win and the `hidden` attribute would do nothing (same
    gotcha already hit once this session on `.progress`). */
-.skins-signin[hidden] {
+.skins-signin[hidden],
+.skins-load[hidden] {
   display: none;
+}
+
+.skins-load .modal__body {
+  max-width: 360px;
 }
 
 .skins-view {
@@ -1256,6 +1262,52 @@ button {
   background: var(--bg-app);
 }
 
+/* ---------- context menu (right-click on an instance card) ----------
+   A single reusable panel appended to <body> and repositioned per invocation (see
+   `contextmenu.ts`), rather than one baked into every card -- same visual language as
+   `.overflow-menu__panel` above so a right-click menu looks like just another way to reach the
+   same actions. */
+.context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: none;
+  padding: 4px 0;
+}
+
+.context-menu.is-open {
+  display: block;
+}
+
+.context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.context-menu__item:hover,
+.context-menu__item:focus-visible {
+  background: var(--bg-app);
+}
+
+.context-menu__item--danger {
+  color: var(--danger);
+}
+
+.context-menu__separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
 /* ---------- version rows (used inside the picker dropdown) ---------- */
 
 .version-row {
@@ -1482,18 +1534,45 @@ button {
   flex: 1;
   height: var(--playbar-control-height);
   background: var(--beacon);
-  border: none;
+  border: 2px solid var(--beacon-shade);
   padding: 0;
+  overflow: hidden;
 }
 
-.play:active {
-  background: var(--beacon-shade);
+/* Same beveled/pressable overlay as `.modal__btn` -- see its comment for why this is an ::after
+   rather than baked into `background`. */
+.play::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    0 -6px 0 0 rgba(0, 0, 0, 0.35) inset,
+    2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
+    -2px -8px 0 0 rgba(0, 0, 0, 0.25) inset;
+  mix-blend-mode: hard-light;
+  transition: background-color 0.1s, box-shadow 0.1s;
+}
+
+.play:active .play__label {
+  transform: translateY(1px);
+}
+
+.play:active::after {
+  box-shadow:
+    2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
+    -2px -2px 0 0 rgba(0, 0, 0, 0.25) inset;
+  background-color: rgba(0, 0, 0, 0.15);
 }
 
 .play:disabled {
   cursor: default;
   background: var(--beacon-shade);
   color: var(--dim);
+}
+
+.play:disabled::after {
+  opacity: 0.4;
 }
 
 .play__label {
@@ -1503,6 +1582,8 @@ button {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  transform: translateY(-3px);
+  transition: transform 0.1s;
 }
 
 .play:disabled .play__label {
@@ -1597,17 +1678,47 @@ button {
   width: 100%;
 }
 
+/* Beveled, "pressable" look borrowed wholesale from the classic Minecraft/wiki button (a 2px
+   border plus a permanent inset-shadow bevel on ::after, blended with `hard-light` so it reads as
+   a raised 3D edge over whatever color sits underneath -- panel, accent or danger red alike --
+   without a separate bevel rule per variant). Pressing swaps the bevel to look sunken and nudges
+   the label down/right by the same amount the padding grew, instead of moving the whole button,
+   so it can't shove neighbouring buttons around in a `gap`-based row. */
 .modal__btn {
+  position: relative;
   flex: 1;
-  padding: 12px 0;
-  background: none;
-  border: 1px solid var(--border);
+  padding: 9px 0 15px;
+  background: var(--panel);
+  border: 2px solid var(--border);
   color: var(--ink);
   font-weight: 600;
+  overflow: hidden;
+  transition: padding 0.1s;
 }
 
-.modal__btn:hover {
-  background: var(--bg-app);
+.modal__btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    0 -6px 0 0 rgba(0, 0, 0, 0.35) inset,
+    2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
+    -2px -8px 0 0 rgba(0, 0, 0, 0.25) inset;
+  mix-blend-mode: hard-light;
+  transition: background-color 0.1s, box-shadow 0.1s;
+}
+
+.modal__btn:active {
+  padding-top: 13px;
+  padding-bottom: 11px;
+}
+
+.modal__btn:active::after {
+  box-shadow:
+    2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
+    -2px -2px 0 0 rgba(0, 0, 0, 0.25) inset;
+  background-color: rgba(0, 0, 0, 0.15);
 }
 
 .modal__btn:disabled {
@@ -1615,8 +1726,8 @@ button {
   cursor: default;
 }
 
-.modal__btn:disabled:hover {
-  background: none;
+.modal__btn:disabled::after {
+  opacity: 0.4;
 }
 
 .modal__btn--primary {
@@ -1625,32 +1736,87 @@ button {
   color: var(--beacon-ink);
 }
 
-.modal__btn--primary:hover {
-  background: var(--beacon);
-}
-
 .modal__btn--danger {
+  background: var(--panel);
   border-color: var(--danger);
   color: var(--danger);
 }
 
-.modal__btn--danger:hover {
+.modal__btn--danger:hover:not(:active) {
   background: var(--danger);
-  border-color: var(--danger);
   color: var(--danger-ink);
 }
 
 /* Without this, the plain `.modal__btn:disabled` rule (color: var(--dim)) wins on specificity
    over `.modal__btn--danger`'s red text, and its `:disabled:hover` rule keeps the background
-   transparent -- so a disabled Delete button showed dim grey text that read as barely-there
-   against the panel, both at rest and on hover. */
+   at rest -- so a disabled Delete button showed dim grey text that read as barely-there against
+   the panel, both at rest and on hover. */
 .modal__btn--danger:disabled {
   color: var(--danger);
   opacity: 0.45;
 }
 
 .modal__btn--danger:disabled:hover {
-  background: none;
+  background: var(--panel);
+}
+
+/* Same beveled 3D edge as `.modal__btn` above, extended to every other clickable "card"/"chip"
+   surface in the app (theme & skin-variant pickers, cape cards, instance cards, the overflow/
+   instance-picker trigger buttons, manage-account row buttons) so the whole app reads as one
+   consistent set of pressable controls instead of `.modal__btn` being the odd one out. Kept as
+   its own shared block rather than folded into each element's own rule since they'd otherwise be
+   sixteen copies of the identical `::after`/`:active` declarations. */
+.theme-option,
+.skin-variant__option,
+.cape-card,
+.instance-card,
+.overflow-menu__trigger,
+.instance-picker__trigger,
+.manage-row__btn {
+  position: relative;
+  overflow: hidden;
+  border-width: 2px;
+}
+
+.theme-option::after,
+.skin-variant__option::after,
+.cape-card::after,
+.instance-card::after,
+.overflow-menu__trigger::after,
+.instance-picker__trigger::after,
+.manage-row__btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    0 -6px 0 0 rgba(0, 0, 0, 0.35) inset,
+    2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
+    -2px -8px 0 0 rgba(0, 0, 0, 0.25) inset;
+  mix-blend-mode: hard-light;
+  transition: box-shadow 0.1s;
+}
+
+.theme-option:active::after,
+.skin-variant__option:active::after,
+.cape-card:active::after,
+.instance-card:active::after,
+.overflow-menu__trigger:active::after,
+.instance-picker__trigger:active::after,
+.manage-row__btn:active::after {
+  box-shadow:
+    2px 2px 0 0 rgba(255, 255, 255, 0.3) inset,
+    -2px -2px 0 0 rgba(0, 0, 0, 0.25) inset;
+}
+
+.theme-option:active,
+.skin-variant__option:active,
+.cape-card:active,
+.instance-card:active,
+.overflow-menu__trigger:active,
+.instance-picker__trigger:active,
+.manage-row__btn:active {
+  transform: translateY(2px);
 }
 
 .modal__panel--wide {

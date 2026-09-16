@@ -15,7 +15,10 @@ export function showTab(target: string) {
   // The 3D skin viewer keeps rendering (and using GPU) even while its tab is hidden unless told
   // otherwise -- pause it off-tab, resume (and load fresh data) when the tab is actually opened.
   skins.setSkinViewerPaused(target !== "skins");
-  if (target === "skins") void skins.loadSkinsTab();
+  // Deliberately doesn't fetch here -- see `skins.ts`'s `loadedForAccountId` doc comment: opening
+  // this tab only shows sign-in/load-prompt/cached-view state, never talks to Microsoft's auth
+  // servers by itself.
+  if (target === "skins") skins.renderSkinsTabState();
 }
 
 export function initTabs() {

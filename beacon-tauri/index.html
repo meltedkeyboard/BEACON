@@ -116,7 +116,12 @@
               <button class="modal__btn modal__btn--primary" type="button" id="skins-signin-btn" data-i18n="skins.signinBtn">Sign in with Microsoft</button>
             </div>
 
-            <div class="skins-view" id="skins-view">
+            <div class="skins-load" id="skins-load" hidden>
+              <p class="modal__body" data-i18n="skins.loadBody">Beacon only talks to Microsoft's auth servers when you ask it to, to avoid hammering them -- load your skins and capes now?</p>
+              <button class="modal__btn modal__btn--primary" type="button" id="skins-load-btn" data-i18n="skins.loadBtn">Load skins</button>
+            </div>
+
+            <div class="skins-view" id="skins-view" hidden>
               <div class="skins-content">
                 <div class="skins-preview">
                   <canvas class="skin-viewer" id="skin-viewer-canvas" width="280" height="380"></canvas>

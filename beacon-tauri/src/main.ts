@@ -5,8 +5,10 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { initContextMenu } from "./contextmenu";
 import { initDom } from "./dom";
 import { applyI18n } from "./i18n";
+import { initKeyboard } from "./keyboard";
 import * as accounts from "./features/accounts";
 import * as contentBrowser from "./features/content-browser";
 import * as instanceContent from "./features/instance-content";
@@ -39,9 +41,16 @@ async function main() {
       }
     });
   });
+  // Double-clicking the drag region toggles maximize/restore, matching every native titlebar
+  // (Windows, GNOME, Qt) -- `data-tauri-drag-region` alone only handles the drag itself.
+  document.querySelectorAll<HTMLElement>("[data-tauri-drag-region]").forEach((region) => {
+    region.addEventListener("dblclick", () => void appWindow.toggleMaximize());
+  });
 
   initTabs();
   initModals();
+  initContextMenu();
+  initKeyboard();
   settings.init();
   instances.init();
   instanceContent.init();

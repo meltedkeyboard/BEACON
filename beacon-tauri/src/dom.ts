@@ -56,6 +56,8 @@ export interface ElRefs {
   languageOptions: NodeListOf<HTMLButtonElement>;
   skinsSigninEl: HTMLElement;
   skinsSigninBtn: HTMLButtonElement;
+  skinsLoadEl: HTMLElement;
+  skinsLoadBtn: HTMLButtonElement;
   skinsViewEl: HTMLElement;
   skinViewerCanvas: HTMLCanvasElement;
   skinVariantOptions: NodeListOf<HTMLButtonElement>;
@@ -248,6 +250,8 @@ export function initDom() {
     languageOptions: document.querySelectorAll<HTMLButtonElement>("#language-picker .theme-option"),
     skinsSigninEl: q("#skins-signin"),
     skinsSigninBtn: q("#skins-signin-btn"),
+    skinsLoadEl: q("#skins-load"),
+    skinsLoadBtn: q("#skins-load-btn"),
     skinsViewEl: q("#skins-view"),
     skinViewerCanvas: q("#skin-viewer-canvas"),
     skinVariantOptions: document.querySelectorAll<HTMLButtonElement>(".skin-variant__option"),

@@ -81,18 +81,40 @@ function renderCapeGrid(profile: MinecraftProfile, accountId: string) {
   }
 }
 
-export async function loadSkinsTab(forceRefresh = false) {
+// Whether this account's profile has actually been fetched this session yet -- distinct from
+// merely being signed in. Reset on logout/account switch below so a different Microsoft account
+// doesn't silently show a leftover skin, but otherwise never auto-set: opening the Skins tab (or
+// this account becoming current) shows a "load" prompt instead of fetching straight away, so
+// browsing the app never talks to Microsoft's auth servers by itself -- see [[skins.loadBody]].
+let loadedForAccountId: string | null = null;
+
+// Called from `tabs.ts` on every switch to the Skins tab and from `accounts.ts` whenever the
+// current account changes -- decides which of sign-in / load-prompt / live view to show, but
+// never fetches anything on its own.
+export function renderSkinsTabState() {
   if (!state.currentAccount || state.currentAccount.type !== "Microsoft") {
     el.skinsSigninEl.hidden = false;
+    el.skinsLoadEl.hidden = true;
     el.skinsViewEl.hidden = true;
     return;
   }
+  const accountId = accountKey(state.currentAccount);
   el.skinsSigninEl.hidden = true;
-  el.skinsViewEl.hidden = false;
+  el.skinsLoadEl.hidden = loadedForAccountId === accountId;
+  el.skinsViewEl.hidden = loadedForAccountId !== accountId;
+}
+
+export async function loadSkinsTab(forceRefresh = false) {
+  if (!state.currentAccount || state.currentAccount.type !== "Microsoft") {
+    renderSkinsTabState();
+    return;
+  }
 
   const accountId = accountKey(state.currentAccount);
   try {
     const profile = await invoke<MinecraftProfile>("get_skin_profile_cmd", { accountId, forceRefresh });
+    loadedForAccountId = accountId;
+    renderSkinsTabState();
     const activeSkin = profile.skins.find((s) => s.state === "ACTIVE") ?? profile.skins[0];
     const viewer = ensureSkinViewer();
     if (activeSkin) {
@@ -175,5 +197,8 @@ export function init(signInRequested: () => void) {
   el.skinUploadBtn.addEventListener("click", () => void uploadSkin());
   el.skinResetBtn.addEventListener("click", () => void resetSkin());
   el.skinsSigninBtn.addEventListener("click", () => onSignInRequested());
+  el.skinsLoadBtn.addEventListener("click", () => void loadSkinsTab());
   el.skinsRefreshBtn.addEventListener("click", () => void loadSkinsTab(true));
+
+  renderSkinsTabState();
 }

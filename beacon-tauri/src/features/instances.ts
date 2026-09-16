@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
+import { showContextMenu } from "../contextmenu";
 import { el } from "../dom";
 import { accountKey, applyDecorativeIcon, describeError, instanceIconBackground, openFolder } from "../helpers";
 import { t } from "../i18n";
@@ -114,6 +115,21 @@ function renderInstanceGrid() {
 
     card.append(icon, name, version);
     card.addEventListener("click", () => openInstanceDetail(instance.id));
+    card.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      showContextMenu(event.clientX, event.clientY, [
+        { label: t("instances.contextMenu.open"), onClick: () => openInstanceDetail(instance.id) },
+        { label: t("instances.contextMenu.rename"), onClick: () => openRenameInstanceModal(instance.id) },
+        { label: t("instances.contextMenu.openFolder"), onClick: () => void openFolder(instance.dir) },
+        { label: t("instances.contextMenu.export"), onClick: () => void exportInstance(instance.id), separatorBefore: true },
+        {
+          label: t("instances.contextMenu.delete"),
+          danger: true,
+          onClick: () =>
+            openConfirmModal(t("deleteInstance.title"), t("instances.deleteBody", { name: instance.name }), () => void deleteInstance(instance.id)),
+        },
+      ]);
+    });
     el.instanceGridEl.appendChild(card);
   }
 }
@@ -397,8 +413,8 @@ function renderInstanceDetail() {
 
 let renameInstanceTargetId: string | null = null;
 
-function openRenameInstanceModal() {
-  const instance = state.instances.find((i) => i.id === state.viewingInstanceId);
+function openRenameInstanceModal(instanceId?: string) {
+  const instance = state.instances.find((i) => i.id === (instanceId ?? state.viewingInstanceId));
   if (!instance) return;
   renameInstanceTargetId = instance.id;
   el.renameInstanceInput.value = instance.name;
@@ -495,9 +511,9 @@ async function clearInstanceIcon() {
 
 // ---------- export / delete ----------
 
-async function exportInstance() {
-  if (!state.viewingInstanceId) return;
-  const instanceId = state.viewingInstanceId;
+async function exportInstance(targetId?: string) {
+  const instanceId = targetId ?? state.viewingInstanceId;
+  if (!instanceId) return;
   const instance = state.instances.find((i) => i.id === instanceId);
   try {
     const destPath = await saveFileDialog({
@@ -551,7 +567,7 @@ export function init() {
 
   el.instanceBackBtn.addEventListener("click", closeInstanceDetail);
 
-  el.instanceRenameBtn.addEventListener("click", openRenameInstanceModal);
+  el.instanceRenameBtn.addEventListener("click", () => openRenameInstanceModal());
   el.renameInstanceConfirmBtn.addEventListener("click", () => void confirmRenameInstance());
   el.renameInstanceCancelBtn.addEventListener("click", hideRenameInstanceModal);
 
