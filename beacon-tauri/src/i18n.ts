@@ -1,10 +1,3 @@
-// Two-language (English/Russian) UI translation. Static markup declares its own keys via
-// `data-i18n`/`data-i18n-placeholder`/`data-i18n-title`/`data-i18n-aria-label` attributes in
-// index.html; `applyI18n()` walks those on startup and again whenever the language changes.
-// Dynamic strings built up in the feature modules call `t(key, vars?)` directly instead. There's
-// no third-party i18n library here -- two languages and a few hundred short strings don't need
-// one, and a flat key->string lookup keeps the translation surface (this file) in one place.
-
 export type Lang = "en" | "ru";
 
 const LANG_KEY = "beacon:lang";
@@ -584,7 +577,7 @@ function writeLang(lang: Lang) {
   try {
     localStorage.setItem(LANG_KEY, lang);
   } catch {
-    // Best-effort, same as every other localStorage-backed setting in this app.
+    // Best-effort: a locked-down webview can throw here.
   }
 }
 
@@ -609,10 +602,6 @@ export function t(key: string, vars?: Record<string, string | number>): string {
   return str;
 }
 
-// Walks every `data-i18n*`-tagged element under `root` and fills in the current language's copy
-// -- called once at startup (`root` defaults to the whole document) and again, scoped to nothing
-// in particular since it's cheap enough to just redo the whole document, whenever `setLang`
-// switches languages.
 export function applyI18n(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>("[data-i18n]").forEach((node) => {
     const key = node.dataset.i18n;

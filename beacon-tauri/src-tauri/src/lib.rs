@@ -7,13 +7,8 @@ use tauri::Manager;
 use commands::{accounts, content_browser, instances, launch, modloader, settings, skins};
 use state::AppState;
 
-/// First launch (no saved `window-state` file yet): tauri.conf.json's static fallback size is
-/// tiny on anything above ~1080p, and with no explicit position the OS/webview has been observed
-/// pinning the window to the screen's top-left corner. Size and center it against the *actual*
-/// primary monitor instead, before the window (created `"visible": false`) is ever shown. Any
-/// later launch just restores whatever `tauri-plugin-window-state` saved last time --
-/// `skip_initial_state` on the plugin builder keeps it from restoring (and showing the window)
-/// before this runs.
+/// On first launch (no saved window-state), sizes and centers against the actual primary
+/// monitor instead of tauri.conf.json's static fallback, which lands top-left on large displays.
 fn position_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri_plugin_window_state::{StateFlags, WindowExt as _};
 
@@ -37,17 +32,13 @@ fn position_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         let _ = window.center();
     }
 
-    // Applies saved position/size/maximized when `has_saved_state`; otherwise a no-op on those
-    // (nothing on disk to restore), leaving the sizing above in place.
     let _ = window.restore_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
     window.show()?;
     window.set_focus()?;
     Ok(())
 }
 
-/// Brings the existing window to the front instead of letting a second `beacon-desktop.exe`
-/// start a second process against the same `config.json`/`game_dir` -- two instances writing to
-/// those concurrently (especially mid-`relocate_directory`, mid-wipe, or mid-install) would race.
+/// Brings the existing window to front instead of a second process racing the same config/game dir.
 fn focus_existing_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -71,8 +62,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
-            // `skip_initial_state` because we want first-launch sizing (below) to run before
-            // *anything* touches the window, restored or not -- see the `setup` closure.
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(
                     tauri_plugin_window_state::StateFlags::POSITION

@@ -10,10 +10,6 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 
 use crate::state::{AppState, RunningGame};
 
-/// What `launch-status` events carry -- `instanceId` lets every listener (the playbar's Play
-/// button, an instance-detail screen's own Start/Stop button) tell whether an event is about the
-/// instance it cares about, since only one instance can ever be launching/running at a time but
-/// it isn't necessarily the one a given screen is showing.
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct LaunchStatusEvent<'a> {
@@ -35,9 +31,6 @@ pub async fn list_versions(state: State<'_, AppState>, snapshots: bool) -> Resul
         .collect())
 }
 
-/// Downloads client jar, libraries, natives and assets for `version_id`, emitting
-/// `install-progress` events as it goes. Safe to call again on an already-installed version --
-/// `install_version` skips files that already pass their SHA1 check.
 #[tauri::command]
 pub async fn install_version_cmd(app: AppHandle, state: State<'_, AppState>, version_id: String) -> Result<(), CoreError> {
     let config = state.config.lock().await.clone();
@@ -48,9 +41,7 @@ pub async fn install_version_cmd(app: AppHandle, state: State<'_, AppState>, ver
     Ok(())
 }
 
-// `rename_all` on the enum only renames the variant tags ("Offline" -> "offline", "Saved" ->
-// "saved") -- it does not reach the fields inside each variant, so `account_id` needed its own
-// `rename_all` to actually accept the frontend's `accountId`.
+// Outer rename_all doesn't reach fields inside variants, hence the inner one on `Saved`.
 #[derive(serde::Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AccountSelection {
@@ -59,14 +50,6 @@ pub enum AccountSelection {
     Saved { account_id: String },
 }
 
-/// Installs `instance_id`'s target version (if needed, emitting `install-progress` events) into
-/// the shared version cache, then launches it with that instance's own directory as the game
-/// directory -- so its saves/resourcepacks/shaderpacks/config stay isolated from every other
-/// instance, even ones targeting the same Minecraft version. Streams the game process's
-/// stdout/stderr back as `game-log` events -- `beacon_core::launch` pipes them rather than
-/// inheriting a console, since a GUI window has none to inherit into. Emits `launch-status` with
-/// `"launching"` right before the process is spawned and `"exited"` once it quits, so the
-/// frontend can drive the Play button's label off two events instead of polling.
 #[tauri::command]
 pub async fn launch_instance_cmd(
     app: AppHandle,
@@ -86,8 +69,6 @@ pub async fn launch_instance_cmd(
         .find_instance(&instance_id)
         .cloned()
         .ok_or_else(|| log_err(CoreError::Other(format!("no instance '{instance_id}'"))))?;
-    // A mod loader's merged version JSON is what's actually installed/launched -- `version_id`
-    // itself always stays the plain vanilla id the instance's "Minecraft X.Y" label shows.
     let effective_version_id = instance
         .mod_loader
         .as_ref()
@@ -113,8 +94,6 @@ pub async fn launch_instance_cmd(
                 .find_account(&account_id)
                 .cloned()
                 .ok_or_else(|| log_err(CoreError::AccountNotFound(account_id.clone())))?;
-            // "Saved" covers both account kinds -- only Microsoft accounts have a session to
-            // refresh, offline ones just launch as-is.
             let session = match &account {
                 Account::Microsoft { .. } => {
                     eprintln!("[beacon] launch_instance_cmd: session for '{account_id}' (cached if still fresh)");
@@ -155,10 +134,7 @@ pub async fn launch_instance_cmd(
     });
     emit_launch_status(&app, &instance_id, "running");
 
-    // The game runs independently of this command's lifetime; just reap the process so it
-    // doesn't linger as a zombie once it exits, and let the frontend know it's gone.
-    // `state: State<'_, AppState>` doesn't outlive this command -- the spawned task re-derives a
-    // handle to the same managed state from `app` (which is `'static`) instead.
+    // Reaper: `state` doesn't outlive this command, so re-derive it from `app` ('static) instead.
     let running_instance_id = instance_id.clone();
     tauri::async_runtime::spawn(async move {
         let status = child.wait().await;
@@ -174,8 +150,6 @@ pub async fn launch_instance_cmd(
     Ok(())
 }
 
-/// Kills the given process id at the OS level -- used by `stop_instance_cmd` instead of holding
-/// onto the `tokio::process::Child` (see `AppState::running`'s doc comment for why).
 #[cfg(windows)]
 fn kill_pid(pid: u32) -> Result<(), CoreError> {
     let output = std::process::Command::new("taskkill")
@@ -206,9 +180,7 @@ fn kill_pid(pid: u32) -> Result<(), CoreError> {
     Ok(())
 }
 
-/// Stops the currently-running game process if it belongs to `instance_id`. The actual
-/// `AppState::running` slot is cleared by the reaper task in `launch_instance_cmd` once the
-/// killed process actually exits, not here -- this only requests the kill.
+/// Only requests the kill; the reaper task in `launch_instance_cmd` clears `AppState::running`.
 #[tauri::command]
 pub async fn stop_instance_cmd(state: State<'_, AppState>, instance_id: String) -> Result<(), CoreError> {
     let running = state.running.lock().await.clone();
@@ -219,17 +191,12 @@ pub async fn stop_instance_cmd(state: State<'_, AppState>, instance_id: String) 
     }
 }
 
-/// Lets a freshly-opened instance-detail screen (or the playbar on app start) know whether a game
-/// is already running, and for which instance -- state that only lives in `AppState::running` and
-/// would otherwise only ever reach the frontend via a `launch-status` event it might have missed.
 #[tauri::command]
 pub async fn running_instance_cmd(state: State<'_, AppState>) -> Result<Option<String>, CoreError> {
     Ok(state.running.lock().await.as_ref().map(|r| r.instance_id.clone()))
 }
 
-/// Every `CoreError` a Tauri command returns crosses the IPC boundary as JSON and never touches
-/// this process's own stdout/stderr -- without this, the terminal running `cargo tauri dev` would
-/// show nothing at all for a failed install/launch, only the frontend's generic error modal.
+/// Command errors cross IPC as JSON only; log here so `cargo tauri dev`'s terminal shows them too.
 fn log_err(e: CoreError) -> CoreError {
     eprintln!("[beacon] launch_instance_cmd: error: {e}");
     e

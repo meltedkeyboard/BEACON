@@ -1,6 +1,4 @@
-// Mod loader install/change/remove for the instance-detail screen's "Version" section. Kept
-// separate from `instances.ts` for the same reason `instance-content.ts` is -- a distinct concern
-// (this one has its own install-flow state machine) rather than instance identity CRUD.
+// Separate from instances.ts: this owns its own install-flow state machine, not instance CRUD.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";

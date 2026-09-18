@@ -8,11 +8,6 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::state::AppState;
 
-/// The mod browser, resource-pack browser, and shader-pack browser (instance-detail Mods/Resource
-/// Packs/Shader Packs tabs' own "Browse…" buttons) are all the same search/preview/install flow
-/// against Modrinth/CurseForge -- these commands are shared across all three, parametrized by
-/// `kind`, rather than tripled. Only `Mod` needs (and requires) a mod loader; a resource pack or
-/// shader pack search/install is scoped to the instance's Minecraft version alone.
 fn parse_kind(kind: &str) -> Result<ContentKind, CoreError> {
     match kind {
         "Mod" => Ok(ContentKind::Mod),
@@ -30,8 +25,6 @@ fn parse_source(source: &str) -> Result<modsource::ModSource, CoreError> {
     }
 }
 
-/// `Mod` needs an installed loader (mods are loader-specific builds); `ResourcePack`/`ShaderPack`
-/// don't have a loader concept at all, so `None` for those regardless of whether one's installed.
 fn loader_for(instance: &Instance, kind: ContentKind) -> Result<Option<ModLoaderKind>, CoreError> {
     match kind {
         ContentKind::Mod => instance
@@ -93,10 +86,7 @@ pub async fn list_content_versions_cmd(
     modsource::list_versions(&state.http, source, &project_id, loader, &instance.version_id, api_key.as_deref()).await
 }
 
-/// The project's own README/overview -- raw Markdown (Modrinth) or raw HTML (CurseForge).
-/// Rendering and sanitizing (both are third-party rich text) happen frontend-side; this only
-/// fetches. Kind-agnostic: both APIs' description endpoints work the same regardless of whether
-/// the project is a mod, resource pack, or shader pack.
+/// Raw Markdown/HTML; rendering and sanitizing happen frontend-side.
 #[tauri::command]
 pub async fn get_content_description_cmd(state: State<'_, AppState>, source: String, project_id: String) -> Result<String, CoreError> {
     let source = parse_source(&source)?;
@@ -133,10 +123,7 @@ pub struct ContentSelection {
     version_id: Option<String>,
 }
 
-/// Installs every selected item in turn (sequential, so `content-install-progress` events stay
-/// meaningful instead of interleaving across items), recording each one's own root file as
-/// provenance so it shows as "Installed" (with a Remove option) next time this instance's
-/// mods/resource packs/shader packs are browsed.
+/// Sequential, not parallel, so `content-install-progress` events don't interleave across items.
 #[tauri::command]
 pub async fn install_selected_content_cmd(
     app: AppHandle,
@@ -189,8 +176,6 @@ pub struct ContentProvenanceView {
     filename: String,
 }
 
-/// What's already installed via the content browser for this instance -- used right after a search
-/// to mark matching results "Installed" (with Remove) instead of offering a checkbox for them again.
 #[tauri::command]
 pub async fn list_content_provenance_cmd(state: State<'_, AppState>, instance_id: String, kind: String) -> Result<Vec<ContentProvenanceView>, CoreError> {
     let kind = parse_kind(&kind)?;
@@ -231,13 +216,8 @@ pub struct ContentUpdateView {
     latest_filename: String,
 }
 
-/// For every installed item this instance has provenance for (see `list_content_provenance_cmd`),
-/// asks the source what its newest compatible build is and reports the ones where that build's
-/// filename doesn't match what's actually on disk -- there's no stored "installed version id" to
-/// compare against directly, so a filename mismatch is what stands in for "out of date" (the same
-/// signal `install`'s own naming already gives every other build). An item whose version lookup
-/// fails outright (project pulled from the source, transient network error) is silently skipped
-/// rather than failing the whole batch -- one broken project shouldn't hide updates for the rest.
+/// No stored "installed version id" to compare against, so a filename mismatch against the
+/// latest build stands in for "out of date". Failed lookups are skipped, not fatal to the batch.
 #[tauri::command]
 pub async fn check_content_updates_cmd(state: State<'_, AppState>, instance_id: String, kind: String) -> Result<Vec<ContentUpdateView>, CoreError> {
     let kind = parse_kind(&kind)?;
@@ -271,10 +251,6 @@ pub async fn check_content_updates_cmd(state: State<'_, AppState>, instance_id: 
     Ok(updates)
 }
 
-/// Downloads `version_id` (a `ContentUpdateView.latest_version_id` from `check_content_updates_cmd`)
-/// in place of `old_filename`, then re-records provenance under the new filename -- same
-/// install-then-record shape as `install_selected_content_cmd`, just for one item, plus the extra
-/// step of deleting the superseded file once the new one is safely down.
 #[tauri::command]
 pub async fn update_content_cmd(
     app: AppHandle,

@@ -1,8 +1,3 @@
-// Slim bootstrap: wires up the DOM refs, generic UI (modals/tabs/window controls), each
-// feature module's own event listeners, then kicks off the startup data load. Actual feature
-// logic lives under `./features/*` (plus `./versions` for the shared version list) -- see each
-// file's own header comment for what it owns.
-
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { initContextMenu } from "./contextmenu";

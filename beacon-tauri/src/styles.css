@@ -1,9 +1,3 @@
-/* ---------- themes ----------
-   Every theme is just a set of token overrides -- structure, spacing and type never change,
-   only these values. "Beacon" (below, on bare :root) is the default. Switching themes sets
-   data-theme on <html> (see main.ts); the [data-theme="..."] blocks below only need to override
-   the tokens that actually differ from the default. */
-
 :root {
   --bg-app: #141414;
   --panel: #1e1e1e;
@@ -15,41 +9,28 @@
   --beacon-shade: #256b36;
   --beacon-ink: #f4f2ec;
   --danger: #b33a3a;
-  /* Fixed (not theme-paired like --beacon-ink) -- --danger's red is dark enough against light
-     text in every theme, whereas --beacon-ink flips to a dark tone in the amber themes, which
-     made red-on-hover buttons go dark-text-on-dark-red -- unreadable. */
+  /* Fixed, not theme-paired: --beacon-ink flips dark in the amber themes, which made
+     red-on-hover buttons unreadable. */
   --danger-ink: #f4f2ec;
 
   --font-ui: "Segoe UI Variable", "Segoe UI", -apple-system, "Noto Sans", "Cantarell", "Ubuntu", sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "Noto Sans Mono", monospace;
 
   --tab-motion: 160ms ease-out;
-  /* Shared by every direct control in the playbar (instance picker, Play) so the row reads as
-     one aligned strip instead of each control sizing itself off its own padding. */
   --playbar-control-height: 56px;
-
-  /* Height of the custom window chrome -- modals and fullscreen screens both need to start
-     below it instead of covering it (see .titlebar and .modal). */
   --titlebar-height: 36px;
   --modal-motion: 200ms;
   --screen-motion: 220ms;
   --backdrop-motion: 800ms ease;
-
-  /* Moments tab screenshot background -- set from Settings (main.ts), read by `.hero__backdrop-layer`. */
   --screenshot-blur: 0px;
 }
 
-/* Amber Signal -- the launcher's original accent direction (a lighthouse's own lamp color)
-   before "Beacon" settled on the starboard-light green. Same dark structure, warmer light. */
 :root[data-theme="amber"] {
   --beacon: #e3a73a;
   --beacon-shade: #a8791f;
   --beacon-ink: #1a1408;
 }
 
-/* Beacon Light -- same structure and accent relationship, inverted luminance. Not a naive
-   invert: panel/bg-app keep their "chrome recedes, content sits forward" relationship, and the
-   accent is deepened a step so it still reads clearly against a light surface. */
 :root[data-theme="light"] {
   --bg-app: #dedcd4;
   --panel: #f8f7f3;
@@ -63,7 +44,6 @@
   --danger: #a23030;
 }
 
-/* Amber Light -- the light surface with the warm amber accent instead of green. */
 :root[data-theme="amber-light"] {
   --bg-app: #dedcd4;
   --panel: #f8f7f3;
@@ -77,12 +57,8 @@
   --danger: #a23030;
 }
 
-/* Star Light -- strict two-tone: every surface pure black, every border and text pure white, no
-   accent or semantic hue at all -- not even for danger/primary emphasis. Emphasis is carried by
-   inverting fill and text (white bg, black text) rather than introducing another color, which is
-   also why --danger-ink is overridden here unlike the other themes: the default --danger-ink is
-   fixed white because it's meant to sit on a dark-red fill, but here --danger is white too, so its
-   hover fill needs black text instead. */
+/* Danger overridden here unlike other themes: --danger itself is white in this theme, so its
+   hover fill needs black text instead of the default white. */
 :root[data-theme="starlight"] {
   --bg-app: #000000;
   --panel: #000000;
@@ -110,11 +86,7 @@
   box-sizing: border-box;
 }
 
-/* ---------- scrollbar ----------
-   Built from the same tokens every theme already overrides (see above), so this one rule matches
-   all four themes instead of needing a copy per theme. `scrollbar-width`/`scrollbar-color` cover
-   Firefox-style engines; `::-webkit-scrollbar-*` covers the WebView2/Chromium engine this app
-   actually ships on. */
+/* ---------- scrollbar ---------- */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
@@ -236,12 +208,9 @@ button {
   width: 100vw;
 }
 
-/* ---------- fullscreen screens (accounts / settings / instance detail) ----------
-   All three overlay the shell (rather than replacing it in flex flow) so open AND close can
-   both slide -- a plain display:none/flex swap can't be transitioned. Closed: pushed off to the
-   right and made non-interactive; `visibility` flips to hidden only *after* the slide-out
-   finishes (the delayed transition below), so it doesn't vanish mid-slide. */
-
+/* ---------- fullscreen screens (accounts / settings / instance detail) ---------- */
+/* Overlays the shell instead of replacing it in flex flow, so open AND close can both slide.
+   `visibility` flips to hidden only after the slide-out transition finishes. */
 .screen-overlay {
   position: absolute;
   top: var(--titlebar-height);
@@ -264,8 +233,6 @@ button {
   transition: transform var(--screen-motion) ease-out, visibility 0s linear 0s;
 }
 
-/* The shell sits underneath every overlay above -- keep it out of tab/click reach while one is
-   open instead of layering invisible controls behind an opaque panel. */
 .app:has(.screen-overlay.is-open) .shell {
   pointer-events: none;
 }
@@ -300,9 +267,6 @@ button {
 .accounts-screen__body {
   flex: 1;
   overflow-y: auto;
-  /* A wide flex row that can't fully shrink (e.g. the Advanced tab's row of disabled buttons)
-     must never widen this whole scrolling column -- without this, overflow drags the entire body,
-     header included, sideways instead of just clipping/wrapping the one row that's too wide. */
   overflow-x: hidden;
   width: 100%;
   max-width: 640px;
@@ -313,11 +277,6 @@ button {
   gap: 24px;
 }
 
-/* Instance-detail reuses `.accounts-screen__body`'s shared scrolling-column shell, but unlike
-   Accounts/Settings (short label-value rows that read best narrow) its content is a mods/worlds/
-   resource-packs table -- capping it at 640px left most of a 1100px-wide default window empty on
-   both sides. Wide enough to use the room on the default window size without going edge-to-edge
-   and stretching sparse rows on an ultrawide monitor. */
 .accounts-screen__body--wide {
   max-width: 1040px;
 }
@@ -356,9 +315,6 @@ button {
   align-items: flex-start;
 }
 
-/* For a row whose actions cluster is unusually wide (e.g. a text input plus several buttons) --
-   wraps the actions onto their own line below the label/hint instead of squeezing
-   .settings-row__info toward zero width to make room. */
 .settings-row--wrap {
   flex-wrap: wrap;
 }
@@ -390,9 +346,6 @@ button {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink);
-  /* Wrap points come from the `<wbr>`s `setPathText()` inserts after each path separator
-     (see main.ts) -- `anywhere` is only the last-resort fallback for a single path segment
-     that's long enough to overflow on its own, not the primary wrapping strategy. */
   overflow-wrap: anywhere;
 }
 
@@ -553,11 +506,7 @@ button {
   width: 72px;
   height: 72px;
   flex-shrink: 0;
-  /* Explicitly transparent, not `var(--border)` -- and not omitted, since this is a `<button>`
-     and browsers give buttons an opaque default background (`buttonface`) that would otherwise
-     show through as a plain white square when there's no icon to display. A filled square with
-     nothing in it reads as a broken/placeholder image rather than "click here to set one"; the
-     hover border below is the only hint this is clickable until an icon is actually set. */
+  /* Explicitly transparent, not omitted: this is a <button>, which has an opaque default bg. */
   background-color: transparent;
   background-size: cover;
   image-rendering: pixelated;
@@ -1151,23 +1100,10 @@ button {
   color: var(--dim);
 }
 
-/* ---------- instance-detail screen's own tabs ----------
-   A second, independent tab bar scoped inside one instance's detail screen (Overview/Mods/
-   Worlds/...), so each section gets its own scroll instead of one long page. Reuses `.tabs`/`.tab`
-   wholesale for visual consistency with the app's top-level tabs, but deliberately does NOT reuse
-   `.tab-panel`'s absolute-position crossfade -- that requires a fixed-height positioned ancestor
-   (`.panel__body`), which `.accounts-screen__body` (a normal scrolling flex column, shared with
-   Settings/Accounts) doesn't have. A plain display toggle lets the existing outer scroll container
-   just work per active panel's own content height. Wired by a small dedicated controller in
-   `instances.ts`, independent of `tabs.ts`'s top-level `[data-tab]` handling -- a different
-   attribute name (`data-instance-tab`) avoids that global selector picking these up too. */
+/* ---------- instance-detail screen's own tabs ---------- */
+/* Deliberately doesn't reuse .tab-panel's absolute-position crossfade: that needs a fixed-height
+   positioned ancestor, which .accounts-screen__body (a normal scrolling flex column) lacks. */
 .instance-tabs {
-  /* `.tabs`' own 36px gap assumes the top-level bar's much wider `.panel` content area -- seven
-     tabs at that spacing didn't fit this screen's column back when it was capped at 640px
-     (confirmed: 560px available, ~654px needed), which was forcing the whole scrolling
-     `.accounts-screen__body` wider than its container instead of just wrapping. The tighter gap
-     plus wrap stay even now that the column is wider (`.accounts-screen__body--wide`) as a safety
-     net for the 720px minimum window width. */
   gap: 8px 20px;
   flex-wrap: wrap;
   margin-bottom: 4px;
@@ -1180,17 +1116,10 @@ button {
   gap: 24px;
 }
 
-/* Entrance-only fade+slide, not the top-level `.tab-panel`'s crossfade -- that needs both panels
-   absolutely positioned over each other, which needs a fixed-height ancestor `.accounts-screen__body`
-   doesn't have (see the block comment above). Going from `display: none` straight to `flex` still
-   lets a plain animation play on the panel that's newly shown, since there's never a moment with
-   two panels in flow at once -- just no matching exit animation for the one being hidden. */
 .instance-tab-panel.is-active {
   display: flex;
-  /* `--tab-motion` already bundles duration+easing ("160ms ease-out", same as `.tab-panel`'s own
-     `transition: opacity var(--tab-motion)`) -- appending another timing-function here broke the
-     `animation` shorthand's syntax outright (computed animation-name came back "none", not just
-     "already finished"). */
+  /* --tab-motion already bundles duration+easing; appending another timing-function here broke
+     the animation shorthand outright (animation-name came back "none"). */
   animation: instance-tab-in var(--tab-motion);
 }
 
@@ -1205,11 +1134,7 @@ button {
   }
 }
 
-/* ---------- overflow menu (instance-detail's "..." button for rarer actions) ----------
-   Same dropdown shape as .account-menu, generalized under its own name since it's not
-   account-specific -- toggled the same way (a trigger button + an absolutely positioned panel),
-   closed by the same document click-outside handling `tabs.ts` already does for the account menu
-   and instance picker. */
+/* ---------- overflow menu (instance-detail's "..." button for rarer actions) ---------- */
 .overflow-menu {
   position: relative;
 }
@@ -1262,11 +1187,7 @@ button {
   background: var(--bg-app);
 }
 
-/* ---------- context menu (right-click on an instance card) ----------
-   A single reusable panel appended to <body> and repositioned per invocation (see
-   `contextmenu.ts`), rather than one baked into every card -- same visual language as
-   `.overflow-menu__panel` above so a right-click menu looks like just another way to reach the
-   same actions. */
+/* ---------- context menu (right-click on an instance card) ---------- */
 .context-menu {
   position: fixed;
   z-index: 50;
@@ -1330,9 +1251,6 @@ button {
   color: var(--dim);
 }
 
-/* Instance names in the instance picker's dropdown reuse `.version-row`'s layout (space-between,
-   bordered rows) but are prose, not version codes -- unlike `.version-row__id` they must not
-   inherit the monospace font meant for things like "1.21.4". */
 .version-row__title {
   font-weight: 600;
 }
@@ -1395,10 +1313,7 @@ button {
   gap: 28px;
 }
 
-/* ---------- install/download progress ----------
-   A dedicated bar above the play controls, the way the vanilla launcher shows "Downloading
-   Libraries"/"Downloading Assets" above its own Play button, instead of the button itself
-   filling up like a loading spinner glued to its label. */
+/* ---------- install/download progress ---------- */
 
 .progress {
   display: flex;
@@ -1406,9 +1321,7 @@ button {
   gap: 6px;
 }
 
-/* `[hidden]` and `.progress`'s own `display: flex` are equal-specificity class/attribute
-   selectors -- without this, the later one in the cascade (`.progress`) would win and the
-   `hidden` attribute would do nothing. */
+/* same [hidden]/display specificity issue as .skins-signin above */
 .progress[hidden] {
   display: none;
 }
@@ -1519,9 +1432,6 @@ button {
   display: block;
 }
 
-/* Reused inside the create-instance / change-version modals -- same row look as the picker's
-   dropdown above, just laid out as normal block content instead of an absolutely-positioned
-   popover. */
 .version-select-list {
   width: 100%;
   max-height: 260px;
@@ -1539,8 +1449,6 @@ button {
   overflow: hidden;
 }
 
-/* Same beveled/pressable overlay as `.modal__btn` -- see its comment for why this is an ::after
-   rather than baked into `background`. */
 .play::after {
   content: "";
   position: absolute;
@@ -1602,14 +1510,10 @@ button {
 
 /* ---------- sign-in modal ---------- */
 
-/* Same bidirectional technique as .screen-overlay: always display:flex, actual show/hide is
-   opacity + visibility, so both open AND close can animate instead of just open (a plain
-   display:none/flex swap can only ever pop). visibility flips to hidden only after the fade-out
-   finishes, so it doesn't vanish mid-close and stays out of tab order while closed. */
+/* Same bidirectional show/hide technique as .screen-overlay. */
 .modal {
   display: flex;
-  /* Fixed, but only below the titlebar -- inset:0 used to cover our own window controls
-     (minimize/maximize/close) whenever a modal was open. */
+  /* Fixed only below the titlebar: inset:0 used to cover our own window controls. */
   position: fixed;
   top: var(--titlebar-height);
   right: 0;
@@ -1678,21 +1582,9 @@ button {
   width: 100%;
 }
 
-/* Beveled, "pressable" look borrowed wholesale from the classic Minecraft/wiki button (a 2px
-   border plus a permanent inset-shadow bevel on ::after, blended with `hard-light` so it reads as
-   a raised 3D edge over whatever color sits underneath -- panel, accent or danger red alike --
-   without a separate bevel rule per variant). Pressing swaps the bevel to look sunken and nudges
-   the label down/right by the same amount the padding grew, instead of moving the whole button,
-   so it can't shove neighbouring buttons around in a `gap`-based row.
-
-   Vertical padding is derived from `--btn-pad-y`/`--btn-raise`/`--btn-press` instead of being a
-   literal `padding` value, specifically so every context that needs a tighter/wider button (see
-   the many `.some-context .modal__btn { --btn-pad-x: ... }` rules below) only ever touches
-   `--btn-pad-x` -- a custom property has no shorthand to collide with, so it can't accidentally
-   clobber the top/bottom halves of this animation the way overriding `padding` outright used to
-   (that was the actual bug behind several "this button's animation is broken" reports: a
-   same-specificity `padding: Npx Mpx` in a later/earlier rule silently ate the raised-text and
-   press-down effect for just that one button). */
+/* Vertical padding is derived from --btn-pad-y/--btn-raise/--btn-press rather than a literal
+   padding value, so context overrides only ever touch --btn-pad-x: a plain `padding: ...`
+   override in another rule used to silently eat this bevel animation for that one button. */
 .modal__btn {
   --btn-pad-x: 0px;
   --btn-pad-y: 12px;
@@ -1760,10 +1652,7 @@ button {
   color: var(--danger-ink);
 }
 
-/* Without this, the plain `.modal__btn:disabled` rule (color: var(--dim)) wins on specificity
-   over `.modal__btn--danger`'s red text, and its `:disabled:hover` rule keeps the background
-   at rest -- so a disabled Delete button showed dim grey text that read as barely-there against
-   the panel, both at rest and on hover. */
+/* Without this, .modal__btn:disabled's color wins on specificity over --danger's red text. */
 .modal__btn--danger:disabled {
   color: var(--danger);
   opacity: 0.45;
@@ -1773,12 +1662,7 @@ button {
   background: var(--panel);
 }
 
-/* Same beveled 3D edge as `.modal__btn` above, extended to every other clickable "card"/"chip"
-   surface in the app (theme & skin-variant pickers, cape cards, instance cards, the overflow/
-   instance-picker trigger buttons, manage-account row buttons) so the whole app reads as one
-   consistent set of pressable controls instead of `.modal__btn` being the odd one out. Kept as
-   its own shared block rather than folded into each element's own rule since they'd otherwise be
-   sixteen copies of the identical `::after`/`:active` declarations. */
+/* Same beveled 3D edge as .modal__btn, shared here instead of duplicated per selector. */
 .theme-option,
 .skin-variant__option,
 .cape-card,
@@ -1839,8 +1723,6 @@ button {
   text-align: left;
 }
 
-/* CurseForge source hint -- shown only on hover/focus of the button itself, not always visible,
-   since the button's own disabled state already communicates "unavailable" at a glance. */
 .mod-source-cf-wrap {
   position: relative;
   flex: 1;
@@ -1871,10 +1753,6 @@ button {
 }
 
 /* ---------- browse mods/resource packs/shader packs (full-screen overlay) ---------- */
-/* Its own body layout, not `.accounts-screen__body`'s single scrolling column -- Settings/Accounts
-   read best as a narrow scrolling list of rows, but this is a two-column search-results/detail
-   split that needs to fill the available height itself and scroll *inside* each column, not scroll
-   the whole page underneath a fixed header. */
 .browse-content-screen__body {
   flex: 1;
   min-height: 0;
@@ -1901,8 +1779,6 @@ button {
   gap: 16px;
 }
 
-/* Column direction, not row -- the error/progress rows (when shown) need the footer's full width,
-   while the Install button only needs to hug the right edge below them. */
 .browse-content-screen__footer {
   display: flex;
   flex-direction: column;
@@ -1929,8 +1805,6 @@ button {
   border: 1px solid var(--border);
 }
 
-/* Review & Install column -- mirrors the checkboxes checked in `.browse-mods__list` live (see
-   `addReviewRow`/`removeReviewRow` in content-browser.ts), so there's no separate "Review" step. */
 .review-pane {
   flex: 1 1 300px;
   display: flex;
@@ -1952,11 +1826,8 @@ button {
   border: none;
 }
 
-/* Stacked instead of `.manage-row`'s usual side-by-side row -- the version `<select>` inherits
-   `.modal__input`'s `width: 100%`, which (as a flex item's preferred main-axis size in a row) fought
-   the name/deps column for the same horizontal space and rendered on top of it. Column direction
-   sidesteps that entirely: width:100% is now a cross-axis size, so it just fills the row's width
-   below the name instead of competing for it. */
+/* Column, not row: the version <select>'s width:100% fought the name/deps column for space
+   in a row layout and rendered on top of it. */
 .review-pane__list .manage-row {
   flex-direction: column;
   align-items: stretch;
@@ -2057,14 +1928,9 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
-/* Click/Ctrl+click/Shift+click row selection (Mods tab) -- a selectable row is itself a
-   plain `<div>`, not a `<button>`, so this is the only visual cue a row is selected. */
 .manage-row--selectable {
   cursor: default;
-  /* Shift+click for range selection would otherwise also trigger the browser's own native text
-     selection on the row's text content (a `<div>` row isn't a form control, so nothing suppresses
-     it by default) -- distracting during a selection gesture that already has its own visual
-     feedback via `.is-selected`. */
+  /* Prevents shift+click range-selection from also triggering native text selection. */
   user-select: none;
 }
 
@@ -2073,10 +1939,6 @@ button {
   box-shadow: inset 3px 0 0 var(--beacon);
 }
 
-/* Browse mods/resource packs/shader packs results list -- the whole row opens the item in the
-   detail pane (see `renderResultCard`'s click handler), so it needs a pointer cursor like any other
-   clickable row, plus a highlight for whichever one is currently open there (`.is-viewing`, set by
-   `renderResultViewHighlight`) so the open item doesn't get lost while scrolling the list. */
 .manage-row--browse {
   cursor: pointer;
 }
@@ -2086,17 +1948,10 @@ button {
 }
 
 .manage-row--browse.is-viewing {
-  /* A translucent tint of `--beacon` rather than a flat color -- reads as "highlighted" in every
-     theme's own accent color (green in the default theme) without hardcoding a value that clashes
-     with the amber/light themes. */
   background: color-mix(in srgb, var(--beacon) 16%, transparent);
   box-shadow: inset 3px 0 0 var(--beacon);
 }
 
-/* Column separators for the Mods table -- a thin line centered in the gap before the icon and
-   before the name/version cell, so checkbox/icon/name read as table columns rather than a loose
-   list. A pseudo-element rather than a border on the cells themselves, since a border on
-   `.manage-row__icon` (fixed 32x32) would grow its box and distort the square. */
 .manage-row--selectable .manage-row__icon,
 .manage-row--selectable .manage-row__info {
   position: relative;
@@ -2117,7 +1972,6 @@ button {
   border-bottom: none;
 }
 
-/* A datapack row nested under its world -- indented to read as "belongs to the row above". */
 .manage-row--nested {
   padding-left: 40px;
   background: var(--bg-app);
@@ -2128,15 +1982,10 @@ button {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  /* Fills whatever space the row's other cells don't use, so the name/version text sits right
-     after the icon (left-aligned) instead of `justify-content: space-between` (removed above)
-     shoving it toward the row's far edge with a big gap after the icon. Also what pushes a
-     trailing `.manage-row__actions` block to the true right edge, same as space-between did. */
   flex: 1;
   text-align: left;
 }
 
-/* Search result icon (Browse mods modal) -- sits before .manage-row__info in the same row. */
 .manage-row__icon {
   width: 32px;
   height: 32px;
@@ -2171,19 +2020,12 @@ button {
   color: var(--beacon);
 }
 
-/* Mods table row: checkbox | icon | name+version | source, as actual grid columns instead of the
-   source badge being crammed into the name cell -- source gets its own fixed-width column so it
-   lines up down the table the way a real column would. No trailing actions column here: Mods uses
-   header-level batch delete (see `updateModsDeleteButton`), not a per-row button. */
 .manage-row--mods {
   display: grid;
   grid-template-columns: auto 32px 1fr 130px;
   column-gap: 12px;
 }
 
-/* Resource/Shader Packs table row: icon | name | source | remove button, each its own column.
-   `--packs-no-icon` drops the icon column for Shader Packs, which never has one (see
-   `renderSimpleContentList`'s `showIcon` -- no standard preview-image convention exists for them). */
 .manage-row--packs {
   display: grid;
   grid-template-columns: 32px 1fr 130px auto;
@@ -2194,10 +2036,6 @@ button {
   grid-template-columns: 1fr 130px auto;
 }
 
-/* Where a mod/resource pack/shader pack came from -- Modrinth/CurseForge green/orange match each
-   service's own brand color, so the badge reads at a glance without having to read its text.
-   "Unknown" (installed some way other than the content browser) gets the neutral --dim treatment
-   used for `.manage-row__type` elsewhere, not a color implying it belongs to either service. */
 .manage-row__source {
   font-size: 11px;
   letter-spacing: 0.03em;

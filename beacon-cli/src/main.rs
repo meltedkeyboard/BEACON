@@ -7,7 +7,7 @@ use beacon_core::launcher::LaunchOptions;
 use beacon_core::{account, forget_account, install_version, launch, login_with_device_code, refresh_session};
 
 #[derive(Parser)]
-#[command(name = "beacon", about = "Minimal Minecraft launcher CLI")]
+#[command(name = "beacon", about = "Beacon Minecraft launcher CLI")]
 struct Cli {
     /// Override the config file location (default: OS config dir/beacon/config.json)
     #[arg(long, global = true)]

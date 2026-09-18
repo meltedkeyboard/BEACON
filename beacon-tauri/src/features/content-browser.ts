@@ -1,18 +1,5 @@
-// "Browse mods/resource packs/shader packs…" full-screen overlay, shared by all three of the
-// instance-detail screen's own tabs -- search Modrinth (always available) or CurseForge (only once
-// the user has pasted their own API key in Settings -- see that file's own header comment for why
-// Beacon can't ship a shared key). Three columns: search results (checkboxes select items to
-// install) | detail pane (the selected result's own description) | review column, which mirrors the
-// checked items live and shows exactly which version of each (plus, Modrinth mods only, which
-// dependencies it brings in) will be downloaded, changeable via a dropdown, before anything actually
-// happens -- the whole point being visibility into what "compatible version" the backend picked,
-// instead of a silent one-click auto-install. One screen instance is reused for all three content
-// kinds (see `KIND_LABELS`) instead of tripling the HTML/CSS/JS for what's otherwise an identical
-// flow. It's a full-screen overlay rather than a modal because a three-column layout needs real
-// width and height to not feel cramped -- it opens *over* the instance-detail screen (not via
-// `closeAllScreens`) so Back returns to the instance still in place, and `instances.ts`'s
-// `closeInstanceDetail` closes it too so it can't linger open (with a stale `currentInstanceId`)
-// once its parent screen is gone.
+// Opens over the instance-detail screen, not via closeAllScreens; instances.ts's
+// closeInstanceDetail closes this too so it doesn't linger with a stale currentInstanceId.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -36,8 +23,6 @@ import type {
 } from "../types";
 import { refreshInstanceContent } from "./instance-content";
 
-// Built from `t()` at call time (not a module-level constant) so it always reflects whatever
-// language is active right now, including one switched mid-session.
 function kindLabels(kind: ContentKind): { noun: string; title: string; searchPlaceholder: string; emptyText: string } {
   switch (kind) {
     case "Mod":
@@ -78,8 +63,6 @@ let updatingKeys = new Set<string>();
 let updatesByKey = new Map<string, ContentUpdateView>(); // resultKey -> available update, empty until "Check for updates" runs
 let checkingUpdates = false;
 
-// ---------- source picker ----------
-
 function renderSourceOptions() {
   el.modSourceOptions.forEach((btn) => {
     const source = btn.dataset.source as ModSource;
@@ -89,12 +72,8 @@ function renderSourceOptions() {
     btn.setAttribute("aria-checked", String(isSelected));
     btn.disabled = disabled;
   });
-  // Hidden entirely once a key is set (nothing to explain then) -- otherwise CSS shows it only on
-  // hover/focus of the button itself (see .mod-source-cf-wrap in styles.css), not always-on.
   el.browseModsHintEl.hidden = hasCurseForgeKey;
 }
-
-// ---------- result list ----------
 
 function updateReviewButton() {
   el.browseModsReviewBtn.textContent = t("modContent.installedFmt", { count: selected.size });
@@ -275,9 +254,7 @@ async function updateInstalledContent(key: string, update: ContentUpdateView) {
   }
 }
 
-// Checks every installed item (across the whole instance, not just what's currently in view) for a
-// newer compatible build -- kept separate from `runSearch` since it's a slower, opt-in check (one
-// extra version-lookup request per installed item) rather than something to redo on every keystroke.
+// Opt-in and slower than runSearch (one lookup per installed item), so kept off the keystroke path.
 async function checkForUpdates() {
   if (!currentInstanceId || checkingUpdates) return;
   checkingUpdates = true;
@@ -302,8 +279,6 @@ async function checkForUpdates() {
   }
 }
 
-// ---------- detail pane ----------
-
 let detailToken = 0;
 
 function renderResultViewHighlight() {
@@ -324,10 +299,7 @@ async function openDetail(result: ModSearchResult) {
   try {
     const raw = await invoke<string>("get_content_description_cmd", { source: result.source, projectId: result.id });
     if (token !== detailToken) return;
-    // Modrinth's `body` is Markdown; CurseForge's is already HTML. Either way it's third-party
-    // rich text from a remote source, so it always goes through DOMPurify before touching
-    // innerHTML -- Markdown itself can embed raw HTML passthrough, so sanitizing only the
-    // CurseForge branch wouldn't be enough.
+    // Always through DOMPurify below: Markdown can embed raw HTML passthrough too.
     const html = result.source === "Modrinth" ? await marked.parse(raw) : raw;
     el.modDetailBodyEl.innerHTML = DOMPurify.sanitize(html);
   } catch (err) {
@@ -343,8 +315,6 @@ function resetDetailPane() {
   el.modDetailPlaceholderEl.hidden = false;
   el.modDetailContentEl.hidden = true;
 }
-
-// ---------- review & install (third column, live-synced with the checkboxes in the results list) ----------
 
 interface ReviewRow {
   result: ModSearchResult;
@@ -376,10 +346,8 @@ async function loadReviewRowOptions(row: ReviewRow) {
       option.textContent = v.is_stable ? `${v.version_number} (${v.filename})` : `${v.version_number} — unstable (${v.filename})`;
       row.select.appendChild(option);
     }
-    // The list is newest-first regardless of stability (an alpha published yesterday still sorts
-    // ahead of last month's release) -- default the dropdown to the newest *stable* build instead
-    // of leaving the browser's own "select the first option" behavior pick whatever's newest by
-    // date. The user can still explicitly choose an unstable build from the dropdown themselves.
+    // Default to newest stable, not just newest -- the list sorts by date, and an unstable build
+    // can be newer than the last stable release.
     const firstStable = versions.find((v) => v.is_stable);
     if (firstStable) row.select.value = firstStable.id;
   } catch (err) {
@@ -408,8 +376,6 @@ async function loadReviewRowPreview(row: ReviewRow) {
   }
 }
 
-// Adds one row to the review column -- called the moment a result's checkbox is checked, not
-// batched behind an explicit "Review" step, so the column always reflects the current selection.
 function addReviewRow(key: string, result: ModSearchResult) {
   if (reviewRows.has(key)) return;
 
@@ -446,9 +412,6 @@ function removeReviewRow(key: string) {
   renderReviewPlaceholder();
 }
 
-// Wipes the whole review column -- used when the browse screen opens fresh (a new instance/kind)
-// or right after a successful install, not on every selection change (see `removeReviewRow` for
-// that, which only ever touches the one row being unchecked).
 function clearReviewRows() {
   el.reviewModsListEl.replaceChildren();
   reviewRows = new Map();
@@ -492,10 +455,6 @@ async function confirmReview() {
   }
 }
 
-// ---------- screen open/close ----------
-
-// Only `Mod` needs an installed loader (mods are loader-specific builds) -- Resource Packs' and
-// Shader Packs' own Browse buttons are always enabled, so this only ever toggles the Mods one.
 export function renderModsBrowseButton(hasLoader: boolean) {
   el.modsBrowseBtn.disabled = !hasLoader;
   el.modsBrowseBtn.title = hasLoader ? "" : t("instance.mods.needLoader");

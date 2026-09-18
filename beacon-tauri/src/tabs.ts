@@ -1,7 +1,4 @@
-// Tab switching (Moments / Installations / Skins / Patch notes) and the cosmetic sidebar-selection
-// highlight. Owns `showTab` in its own module (rather than main.ts) specifically so
-// `features/play.ts` can call it too (clicking Play with no instance selected jumps to the
-// Installations tab) without a circular import between main.ts and play.ts.
+// Own module, not main.ts: play.ts calls showTab too, and that would be a circular import.
 
 import { el } from "./dom";
 import * as skins from "./features/skins";
@@ -12,12 +9,7 @@ let panels: NodeListOf<HTMLElement>;
 export function showTab(target: string) {
   tabs.forEach((t) => t.classList.toggle("is-active", t.dataset.tab === target));
   panels.forEach((panel) => panel.classList.toggle("is-active", panel.dataset.tabPanel === target));
-  // The 3D skin viewer keeps rendering (and using GPU) even while its tab is hidden unless told
-  // otherwise -- pause it off-tab, resume (and load fresh data) when the tab is actually opened.
-  skins.setSkinViewerPaused(target !== "skins");
-  // Deliberately doesn't fetch here -- see `skins.ts`'s `loadedForAccountId` doc comment: opening
-  // this tab only shows sign-in/load-prompt/cached-view state, never talks to Microsoft's auth
-  // servers by itself.
+  skins.setSkinViewerPaused(target !== "skins"); // avoids the 3D viewer rendering off-tab
   if (target === "skins") skins.renderSkinsTabState();
 }
 
@@ -29,9 +21,6 @@ export function initTabs() {
     tab.addEventListener("click", () => showTab(tab.dataset.tab ?? "installations"));
   });
 
-  // Accounts/Settings are one-off navigations (they open a fullscreen screen), not a
-  // persistent choice like the game entry above them -- excluded from the selection toggle so
-  // they don't pick up the beacon-beam highlight on click.
   const navRows = document.querySelectorAll<HTMLButtonElement>(
     ".nav-row[data-nav]:not(#accounts-nav):not(#settings-nav)",
   );

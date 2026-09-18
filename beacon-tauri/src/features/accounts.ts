@@ -1,6 +1,3 @@
-// Account menu, sign-in (device code flow), offline account add/rename, and the Manage Accounts
-// screen. `accounts[0]` is always the account Play/launch uses.
-
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -31,10 +28,7 @@ export function renderAccount() {
     el.playbarUserEl.textContent = t("playbar.notSignedIn");
   }
   play.renderPlayButton();
-  // Account switches (sign-in, reorder in the account menu) can change whether the Skins tab
-  // should show sign-in / load-prompt / cached-view -- but never triggers a fetch by itself (see
-  // `skins.ts`'s `loadedForAccountId` doc comment for why).
-  skins.renderSkinsTabState();
+  skins.renderSkinsTabState(); // re-renders state only, never triggers a fetch by itself
 }
 
 function openAccountMenu() {
@@ -93,11 +87,7 @@ function hideLoginModal() {
   el.loginModalEl.classList.remove("is-open");
 }
 
-// Five different buttons can call this (sidebar, account menu, Accounts screen, the Skins tab's
-// sign-in prompt, and Play-while-signed-out) -- without this guard, clicking more than one of
-// them before the first device-code flow finishes starts a second, fully independent polling
-// loop against Microsoft's token endpoint. Two or three of those running at once is exactly the
-// kind of quick-succession hammering that gets rate-limited (429s).
+// Guards against multiple entry points starting parallel device-code polling loops (429s).
 let signInInProgress = false;
 
 export async function startSignIn() {
@@ -119,8 +109,6 @@ export async function startSignIn() {
     signInInProgress = false;
   }
 }
-
-// ---------- add / rename offline account ----------
 
 function openOfflineModal(mode: NonNullable<typeof offlineModalMode>) {
   offlineModalMode = mode;
@@ -161,8 +149,6 @@ async function confirmOfflineModal() {
     el.offlineNicknameError.hidden = false;
   }
 }
-
-// ---------- manage accounts (fullscreen) ----------
 
 function openAccountsScreen() {
   closeAllScreens();

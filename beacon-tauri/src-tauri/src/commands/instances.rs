@@ -11,17 +11,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::state::{join_err, AppState};
 
-// ---------------------------------------------------------------------------------------------
-// Instances -- each one is its own sandbox (saves/resourcepacks/shaderpacks/config), isolated
-// from every other instance, the same way Prism Launcher's instances are. Unlike accounts,
-// there's no "move to front" scheme: `selected_instance_id` is just set directly, and the
-// frontend's instance picker shows every instance in whatever order the backend returns them.
-// ---------------------------------------------------------------------------------------------
-
-/// An [`Instance`] plus its resolved absolute directory (and every content subfolder's own
-/// resolved path, for the instance screen's "open folder" buttons) -- the frontend needs these to
-/// open them in the file explorer, but `Instance` itself deliberately doesn't store any of them,
-/// so a stale absolute path never ends up baked into `config.json` if `game_dir` ever moves.
+/// `Instance` itself deliberately doesn't store resolved paths, so a stale absolute path never
+/// ends up baked into config.json if `game_dir` moves.
 #[derive(serde::Serialize)]
 pub struct InstanceView {
     #[serde(flatten)]
@@ -58,12 +49,7 @@ fn require_instance<'a>(config: &'a LauncherConfig, instance_id: &str) -> Result
         .ok_or_else(|| CoreError::Other(format!("no instance '{instance_id}'")))
 }
 
-/// Grants the asset protocol scope read access to every instance icon already on disk. The scope
-/// (`tauri.conf.json`'s `assetProtocol.scope`) starts empty -- icons live at arbitrary,
-/// user-chosen paths outside any directory Beacon controls, so instead of statically allowing the
-/// whole filesystem (`["**"]`), each icon path is allowed individually, once at startup for
-/// existing icons and again in [`set_instance_icon_cmd`] whenever a new one is picked. The scope
-/// itself is in-memory only and resets on every launch, hence re-allowing here.
+/// Asset protocol scope is in-memory only and resets on every launch, hence re-allowing here.
 pub fn allow_existing_icons(app: &AppHandle, config: &LauncherConfig) {
     let scope = app.asset_protocol_scope();
     for instance in &config.instances {
@@ -97,7 +83,6 @@ pub async fn create_instance_cmd(
     let mut config = state.config.lock().await;
     let instance = create_instance(&config, name, version_id)?;
     config.upsert_instance(instance.clone());
-    // A freshly created instance becomes current -- you just made it, Play should use it.
     config.selected_instance_id = Some(instance.id.clone());
     config.save(&state.config_path).await?;
     Ok(instance_view(&config, instance))
@@ -111,9 +96,7 @@ pub async fn select_instance_cmd(state: State<'_, AppState>, instance_id: String
     config.save(&state.config_path).await
 }
 
-/// Renames an instance. Its id is derived from the name (see [`beacon_core::Instance::id`]), so
-/// like [`crate::commands::accounts::rename_offline_account_cmd`] this replaces the list entry
-/// (and, here, the instance's on-disk directory) rather than mutating it in place.
+/// Id is derived from the name, so renaming replaces the list entry (and on-disk directory).
 #[tauri::command]
 pub async fn rename_instance_cmd(
     state: State<'_, AppState>,
@@ -147,19 +130,12 @@ pub async fn set_instance_version_cmd(
         .position(|i| i.id == instance_id)
         .ok_or_else(|| CoreError::Other(format!("no instance '{instance_id}'")))?;
     config.instances[position].version_id = version_id;
-    // A loader build targets one specific Minecraft version -- changing it invalidates whatever
-    // was installed, same as every other launcher's behavior here. The user just reinstalls it
-    // for the new version from the instance screen.
-    config.instances[position].mod_loader = None;
+    config.instances[position].mod_loader = None; // loader build is version-specific, must reinstall
     let instance = config.instances[position].clone();
     config.save(&state.config_path).await?;
     Ok(instance_view(&config, instance))
 }
 
-/// `icon_path` is `None` to clear the icon back to the fallback glyph, `Some(path)` to set it --
-/// the path itself comes from the frontend's native file-picker dialog (`@tauri-apps/plugin-dialog`).
-/// Since the asset protocol scope starts empty (see [`allow_existing_icons`]), a newly picked path
-/// is granted read access here -- otherwise the webview couldn't load it via `convertFileSrc()`.
 #[tauri::command]
 pub async fn set_instance_icon_cmd(
     app: AppHandle,
@@ -250,10 +226,6 @@ pub async fn delete_shader_pack_cmd(state: State<'_, AppState>, instance_id: Str
     delete_shader_pack(&config, instance, &file_name)
 }
 
-/// Also grants the asset protocol scope read access to the instance's whole `screenshots/` folder
-/// before returning -- like `set_instance_icon_cmd`, the scope starts empty, but unlike a single
-/// icon path a folder that can hold dozens of screenshots is worth granting once as a directory
-/// (non-recursive; screenshots live directly in it, no subfolders) rather than file-by-file.
 #[tauri::command]
 pub async fn list_screenshots_cmd(
     app: AppHandle,
@@ -268,8 +240,6 @@ pub async fn list_screenshots_cmd(
     list_screenshots(&config, instance)
 }
 
-/// Deletes a screenshot, clearing it as the pinned Play-tab backdrop first if it was pinned --
-/// otherwise the instance would be left pointing at a pin that no longer exists on disk.
 #[tauri::command]
 pub async fn delete_screenshot_cmd(state: State<'_, AppState>, instance_id: String, name: String) -> Result<(), CoreError> {
     let mut config = state.config.lock().await;
@@ -284,8 +254,6 @@ pub async fn delete_screenshot_cmd(state: State<'_, AppState>, instance_id: Stri
     Ok(())
 }
 
-/// Pins a screenshot as this instance's Play-tab backdrop (`Some(name)`), or unpins back to
-/// rotating through all of them (`None`).
 #[tauri::command]
 pub async fn set_pinned_screenshot_cmd(
     state: State<'_, AppState>,
@@ -325,10 +293,6 @@ pub async fn delete_mod_cmd(state: State<'_, AppState>, instance_id: String, nam
     delete_mod(&config, instance, &name)
 }
 
-/// Copies picked mod jars (from the frontend's open-file dialog) into the instance's `mods/`
-/// folder. Unlike `export_instance_cmd`/`import_instance_cmd` below, this doesn't need
-/// `spawn_blocking` -- a handful of mod jars copy fast enough not to stall this command's worker
-/// thread the way zipping/unzipping a whole instance directory can.
 #[tauri::command]
 pub async fn add_mods_cmd(state: State<'_, AppState>, instance_id: String, source_paths: Vec<String>) -> Result<(), CoreError> {
     let config = state.config.lock().await;
@@ -337,10 +301,7 @@ pub async fn add_mods_cmd(state: State<'_, AppState>, instance_id: String, sourc
     add_mods(&config, instance, &paths)
 }
 
-/// Zips the instance's whole directory to `dest_path` (chosen by the frontend's save-file
-/// dialog). Runs on a blocking thread -- unlike the small list/delete commands above, a heavily-
-/// played instance's directory can be large enough that walking and compressing it would
-/// otherwise stall this command's async worker thread for a noticeable moment.
+/// Runs on a blocking thread: zipping a large instance directory would otherwise stall the worker.
 #[tauri::command]
 pub async fn export_instance_cmd(state: State<'_, AppState>, instance_id: String, dest_path: String) -> Result<(), CoreError> {
     let config = state.config.lock().await.clone();
@@ -354,8 +315,6 @@ pub async fn export_instance_cmd(state: State<'_, AppState>, instance_id: String
         .map_err(join_err)?
 }
 
-/// Unpacks an instance archive (chosen by the frontend's open-file dialog) into a new instance
-/// and adds it to the config. See [`export_instance_cmd`] for why this runs on a blocking thread.
 #[tauri::command]
 pub async fn import_instance_cmd(state: State<'_, AppState>, source_path: String) -> Result<InstanceView, CoreError> {
     let config_snapshot = state.config.lock().await.clone();
@@ -366,7 +325,6 @@ pub async fn import_instance_cmd(state: State<'_, AppState>, source_path: String
 
     let mut config = state.config.lock().await;
     config.upsert_instance(instance.clone());
-    // Same as `create_instance_cmd` -- an imported instance becomes current immediately.
     config.selected_instance_id = Some(instance.id.clone());
     config.save(&state.config_path).await?;
     Ok(instance_view(&config, instance))

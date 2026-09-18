@@ -1,8 +1,3 @@
-// Everything inside the instance-detail screen that lists/mutates one of its content folders:
-// Mods, Worlds (+datapacks), Resource Packs, Shader Packs, Screenshots (list/delete/pin). Split
-// out of `instances.ts` because this is a distinct concern (folder content CRUD) from instance
-// identity CRUD (rename/version/icon/export/delete).
-
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 
@@ -14,10 +9,6 @@ import { openConfirmModal, showErrorModal } from "../modals";
 import { state } from "../state";
 import type { ModInfo, ModProvenanceEntry, ModSource, ResourcePackInfo, ScreenshotInfo, WorldInfo } from "../types";
 
-// Text label shown next to a mod/resource pack/shader pack's name for where it came from --
-// `undefined` means it was never installed through the content browser (dropped in manually, or
-// predates provenance tracking), shown as "Unknown" rather than left blank so it reads as a
-// deliberate "we don't know" instead of a missing value.
 function renderSourceLabel(source: ModSource | undefined): HTMLElement {
   const label = document.createElement("span");
   label.className = "manage-row__source";
@@ -26,9 +17,6 @@ function renderSourceLabel(source: ModSource | undefined): HTMLElement {
   return label;
 }
 
-// Shared by Resource Packs (has a real `pack.png`-derived icon, `showIcon: true`) and Shader
-// Packs (no equivalent standard convention exists for a preview image, so `showIcon: false` skips
-// the icon slot entirely rather than rendering a permanently-blank one).
 function renderSimpleContentList(
   container: HTMLElement,
   items: { name: string; icon_data_url: string | null }[],
@@ -137,10 +125,6 @@ function renderWorlds(instanceId: string, worlds: WorldInfo[]) {
     }
   }
 }
-
-// ---------- Mods table: Enabled(checkbox) | Icon | Name | Version, click/Ctrl/Shift-select ----------
-// File-manager-style multi-select instead of a per-row Remove button -- one selection, one Delete
-// button (in the section header), one confirmation for the whole batch or a single mod alike.
 
 let selectedMods = new Set<string>(); // by filename (ModInfo.name)
 let lastClickedMod: string | null = null;

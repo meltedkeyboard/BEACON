@@ -28,11 +28,7 @@ pub async fn list_loader_versions_cmd(
     modloader::list_versions(&state.http, kind, &mc_version).await
 }
 
-/// Installs a mod loader on top of `instance_id`'s current (vanilla) `version_id`, emitting
-/// `loader-install-progress` events as it goes -- a separate event name from `install-progress`
-/// so this doesn't interfere with the Play button's own progress state while the install-loader
-/// modal is open. On success, records the merged effective version id on the instance so
-/// `launch_instance_cmd` picks it up on the next Play click.
+/// Separate event name from `install-progress` so this doesn't interfere with the Play button's state.
 #[tauri::command]
 pub async fn install_loader_cmd(
     app: AppHandle,

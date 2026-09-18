@@ -1,9 +1,5 @@
-// Shared mutable app state -- only fields more than one feature module actually reads or writes.
-// Everything else (e.g. `playStage`, `accounts`, `skinViewer`) stays a local variable inside the
-// one feature file that owns it; importing modules only call that file's exported functions.
-//
-// Mutated in place (`state.foo = x`), never reassigned as a binding -- ES modules don't allow an
-// importer to reassign an imported `let`, only to mutate a property of an imported object.
+// Mutated in place (`state.foo = x`), never reassigned -- ES modules don't allow an importer
+// to reassign an imported `let`, only to mutate a property of an imported object.
 
 import type { Account, DirectorySettings, Instance } from "./types";
 
@@ -13,9 +9,6 @@ export const state = {
   selectedInstanceId: null as string | null,
   viewingInstanceId: null as string | null,
   directorySettings: null as DirectorySettings | null,
-  // Moments-tab-enabled, Moments-tab-background, and "show snapshots" are per-device settings
-  // (owned/persisted by `settings.ts`), but `play.ts`/`tabs.ts`/`versions.ts` respectively need to
-  // read the current value.
   showSnapshots: false,
   momentsTabEnabled: false,
   screenshotsBgEnabled: true,

@@ -69,11 +69,7 @@ export interface LoaderVersionInfo {
 
 export type ModSource = "Modrinth" | "CurseForge";
 
-// The mod browser, resource-pack browser, and shader-pack browser all search/preview/install
-// against the same two sources -- `ContentKind` is what tells the shared backend commands (and the
-// shared browser modal) which of the three folders/facets/classes to use. The `Mod*`-named types
-// below are shaped identically for all three kinds (only ever "a searchable download"), so they're
-// reused as-is rather than renamed.
+// Shared browser modal/commands for mods, resource packs, and shader packs; `Mod*` types below are reused as-is for all three.
 export type ContentKind = "Mod" | "ResourcePack" | "ShaderPack";
 
 export interface ModSearchResult {

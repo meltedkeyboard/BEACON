@@ -1,6 +1,3 @@
-// Fetched once at startup, rendered on demand inside the create-instance and change-version
-// modals (both in `features/instances.ts`).
-
 import { invoke } from "@tauri-apps/api/core";
 
 import { state } from "./state";

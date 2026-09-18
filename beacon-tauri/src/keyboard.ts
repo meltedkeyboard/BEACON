@@ -1,9 +1,3 @@
-// App-wide keyboard/focus conventions matching a native desktop toolkit (Qt and friends): Escape
-// dismisses the topmost overlay, Enter from a text field activates the current dialog's primary
-// button, Tab is trapped inside an open modal instead of leaking focus to the shell behind it,
-// and arrow keys move focus within tab strips / radio groups instead of requiring repeated Tabs.
-// Wired once from `main.ts`, after every feature module's own `init()` has built its DOM.
-
 import { closeContextMenu } from "./contextmenu";
 import { hideConfirmModal, hideErrorModal } from "./modals";
 
@@ -33,8 +27,7 @@ function openPopover(): HTMLElement | null {
 }
 
 function closeModal(modal: HTMLElement) {
-  // These two generic modals have dedicated hide functions that also clear pending state; every
-  // other modal only ever needs its `is-open` class removed to slide back out.
+  // These two have dedicated hide functions that also clear pending state.
   if (modal.id === "error-modal") {
     hideErrorModal();
     return;

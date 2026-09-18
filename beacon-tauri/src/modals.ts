@@ -1,7 +1,3 @@
-// Generic overlays used from nearly every feature module: the plain error modal, the "are you
-// sure?" confirm modal (delete world/instance), and closing whichever fullscreen screen
-// (Accounts/Settings/Instance detail) happens to be open before opening a different one.
-
 import { el } from "./dom";
 
 export function showErrorModal(message: string) {

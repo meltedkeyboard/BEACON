@@ -1,7 +1,3 @@
-// Skins & capes tab: a real Minecraft Services API-backed 3D preview (skinview3d) for whichever
-// account is currently selected for Play. Only meaningful for a Microsoft account -- offline
-// accounts get a sign-in prompt instead.
-
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { SkinViewer } from "skinview3d";
@@ -29,8 +25,7 @@ function ensureSkinViewer(): SkinViewer {
   return skinViewer;
 }
 
-// Called from `tabs.ts` on every tab switch -- the 3D viewer keeps rendering (and using GPU) even
-// while its tab is hidden unless told otherwise.
+// The 3D viewer keeps rendering (and using GPU) while its tab is hidden unless told otherwise.
 export function setSkinViewerPaused(paused: boolean) {
   if (skinViewer) skinViewer.renderPaused = paused;
 }
@@ -81,16 +76,10 @@ function renderCapeGrid(profile: MinecraftProfile, accountId: string) {
   }
 }
 
-// Whether this account's profile has actually been fetched this session yet -- distinct from
-// merely being signed in. Reset on logout/account switch below so a different Microsoft account
-// doesn't silently show a leftover skin, but otherwise never auto-set: opening the Skins tab (or
-// this account becoming current) shows a "load" prompt instead of fetching straight away, so
-// browsing the app never talks to Microsoft's auth servers by itself -- see [[skins.loadBody]].
+// Never auto-set: opening the Skins tab shows a load prompt instead of fetching straight away,
+// so browsing the app never talks to Microsoft's auth servers by itself.
 let loadedForAccountId: string | null = null;
 
-// Called from `tabs.ts` on every switch to the Skins tab and from `accounts.ts` whenever the
-// current account changes -- decides which of sign-in / load-prompt / live view to show, but
-// never fetches anything on its own.
 export function renderSkinsTabState() {
   if (!state.currentAccount || state.currentAccount.type !== "Microsoft") {
     el.skinsSigninEl.hidden = false;

@@ -7,35 +7,15 @@ use beacon_core::config::LauncherConfig;
 use beacon_core::{refresh_session, Account, CoreError, MinecraftProfile};
 use tokio::sync::Mutex;
 
-/// Everything a command needs to talk to `beacon-core`. `config` is kept in memory and only
-/// written back to disk on the commands that actually change it, mirroring what `beacon-cli`
-/// does per-invocation.
 pub struct AppState {
     pub http: reqwest::Client,
     pub config: Mutex<LauncherConfig>,
     pub config_path: PathBuf,
-    /// In-memory only, keyed by account id -- never written to disk, same non-persistence
-    /// guarantee the Microsoft refresh token's own handling already has. Exists purely so opening
-    /// the Skins tab (or clicking Play) repeatedly in a short span doesn't re-run the full
-    /// Microsoft -> Xbox Live -> XSTS -> Minecraft Services chain every single time; that chain
-    /// hammering Microsoft's endpoints in quick succession is what was triggering 429s.
+    /// Cached to avoid re-running the Microsoft -> Xbox Live -> XSTS -> Minecraft Services
+    /// chain on every Play/Skins-tab open, which was triggering 429s.
     mc_sessions: Mutex<HashMap<String, MinecraftSession>>,
-    /// In-memory only, keyed by account id -- the Skins tab reloads (a live `GET
-    /// /minecraft/profile` call) on every tab switch and every account-list refresh, which alone
-    /// (session caching above notwithstanding) was still enough live traffic to Minecraft
-    /// Services to trip 429s under heavy tab-switching. Skins/capes essentially never change
-    /// except through Beacon's own upload/reset/cape commands (which already refetch and update
-    /// this cache themselves) or a manual refresh -- there's no reason to treat every tab open as
-    /// a reason to ask Mojang again.
     pub skin_profiles: Mutex<HashMap<String, MinecraftProfile>>,
-    /// The currently-running game process, if any -- only one instance can be launched at a time
-    /// (mirrors how the playbar's single Play button already worked), so this is a single slot
-    /// rather than a map. Set by `launch::launch_instance_cmd` right after the process spawns,
-    /// cleared by its reaper task once the process exits. `stop_instance_cmd` reads the pid out of
-    /// here and kills it at the OS level instead of holding onto the `tokio::process::Child`
-    /// itself, which would otherwise need to be shared between the reaper task (which owns it to
-    /// call `.wait()`) and the stop command (which would need `&mut` access to call
-    /// `.start_kill()`) at the same time.
+    /// Single slot, not a map: only one game instance can run at a time.
     pub running: Mutex<Option<RunningGame>>,
 }
 
@@ -57,9 +37,6 @@ impl AppState {
         }
     }
 
-    /// Reuses a cached session for `account` if it isn't about to expire, refreshing (and
-    /// re-caching) only when it's missing or close to it -- see the `mc_sessions` field doc for
-    /// why this exists.
     pub async fn minecraft_session(&self, config: &LauncherConfig, account: &Account) -> Result<MinecraftSession, CoreError> {
         const EXPIRY_BUFFER: Duration = Duration::from_secs(60);
         let account_id = account.id();
@@ -79,10 +56,7 @@ impl AppState {
     }
 }
 
-/// Turns a `tokio::task::JoinError` from a `spawn_blocking` task into a `CoreError` instead of
-/// panicking the calling command -- a panic inside the blocking task (e.g. the `zip` crate
-/// choking on a corrupt archive during import) would otherwise take down the async worker thread
-/// via `.expect(..)` rather than surfacing as an ordinary error on the frontend.
+/// Converts a `spawn_blocking` panic into a normal error instead of taking down the worker thread.
 pub fn join_err(e: tokio::task::JoinError) -> beacon_core::CoreError {
     beacon_core::CoreError::Other(format!("internal task failed: {e}"))
 }

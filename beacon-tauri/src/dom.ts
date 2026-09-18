@@ -1,7 +1,5 @@
-// Every DOM element every feature module touches, queried once. ES modules can't let another
-// module reassign an imported `let` binding, but they CAN mutate properties of an imported
-// object -- so this is one object (`el`), filled in by `initDom()` before any feature's `init()`
-// runs, instead of ~90 separate `const`s that used to all live in one function's closure.
+// One mutable object, not separate `let` exports: ES modules can't let importers reassign a
+// `let` binding, but they can mutate an imported object's properties.
 
 export interface ElRefs {
   accountMenuEl: HTMLElement;

@@ -1,8 +1,3 @@
-// Instance grid (Installations tab), instance picker (playbar dropdown), create/import instance,
-// and the instance-detail screen's own chrome: open/close, rename, change version, icon pick/
-// clear, open-folder/export/delete. Folder *content* (mods/worlds/packs/screenshots) lives in
-// `./instance-content` instead -- a distinct concern from instance identity CRUD.
-
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -19,8 +14,6 @@ import * as contentBrowser from "./content-browser";
 import { refreshInstanceContent } from "./instance-content";
 import * as modLoader from "./mod-loader";
 import * as play from "./play";
-
-// ---------- instance picker (playbar) ----------
 
 function renderInstancePickerTrigger() {
   const current = currentInstance();
@@ -82,8 +75,6 @@ async function selectInstance(instanceId: string) {
     showErrorModal(describeError(err));
   }
 }
-
-// ---------- installations tab: instance grid ----------
 
 function renderInstanceGrid() {
   el.instanceGridEl.replaceChildren();
@@ -152,14 +143,9 @@ export async function loadInstances() {
   void play.refreshPlayBackdrop();
 }
 
-// ---------- create instance ----------
-
 let createInstanceSelectedVersion: string | null = null;
 
-// The name field auto-fills with the picked version ("1.21.4") so creating an instance needs no
-// typing at all -- but only until the user actually edits it themselves, tracked here so picking
-// a different version afterwards doesn't clobber a name they already chose.
-let createInstanceNameIsAuto = true;
+let createInstanceNameIsAuto = true; // false once the user edits the name field themselves
 
 function pickCreateInstanceVersion(versionId: string) {
   createInstanceSelectedVersion = versionId;
@@ -204,8 +190,6 @@ async function confirmCreateInstance() {
   }
 }
 
-// ---------- import ----------
-
 async function importInstance() {
   try {
     const sourcePath = await openFileDialog({
@@ -221,10 +205,6 @@ async function importInstance() {
   }
 }
 
-// ---------- instance detail tabs ----------
-// A second, independent tab bar scoped inside this one screen -- see styles.css's own comment on
-// `.instance-tabs` for why this doesn't reuse `tabs.ts`'s top-level `showTab`/`[data-tab]` handling.
-
 let instanceTabs: NodeListOf<HTMLButtonElement>;
 let instanceTabPanels: NodeListOf<HTMLElement>;
 
@@ -233,24 +213,10 @@ function showInstanceTab(target: string) {
   instanceTabPanels.forEach((panel) => panel.classList.toggle("is-active", panel.dataset.instanceTabPanel === target));
 }
 
-// ---------- instance detail: Start/Stop + game log ----------
-// Independent from the playbar's own Play button (`features/play.ts`) -- this lets a user launch
-// or stop the instance they're currently customizing without leaving the detail screen. Only one
-// instance can ever be launching/running at a time (enforced backend-side).
-//
-// Tracked with its own local mirror (`runningInstanceId` below) rather than reading
-// `play.runningInstance()` inside this screen's own `launch-status` handler -- both modules
-// listen for the same event independently, and `instances.init()` runs before `play.init()`
-// (see `main.ts`), so this screen's callback can fire *before* play.ts has updated its copy for
-// the same event. Deriving straight from the event payload avoids that ordering race.
+// Own mirror, not play.runningInstance(): instances.init() runs before play.init(), so reading
+// play's copy here could race against play.ts's own update for the same event.
 let runningInstanceId: string | null = null;
-// True only for the (short) window between clicking Start and the backend's first "launching"
-// event -- once that arrives, `runningInstanceId` takes over as the source of truth.
 let instanceLaunchStarting = false;
-
-// Buffered so switching away from the Advanced tab and back doesn't lose lines received while it
-// wasn't visible -- cleared and re-tagged every time a *new* launch's first log line would
-// otherwise get appended after stale lines from a previous run of the same instance.
 let gameLogInstanceId: string | null = null;
 let gameLogLines: string[] = [];
 
@@ -365,13 +331,9 @@ function initInstanceLaunchControls() {
   });
 }
 
-// ---------- overflow menu (Clear icon / Open .minecraft / Open libraries / Export) ----------
-
 function closeOverflowMenu() {
   el.instanceOverflowMenuEl.classList.remove("is-open");
 }
-
-// ---------- instance detail (fullscreen) ----------
 
 export function openInstanceDetail(instanceId: string) {
   closeAllScreens();
@@ -383,10 +345,6 @@ export function openInstanceDetail(instanceId: string) {
 
 function closeInstanceDetail() {
   el.instanceScreenEl.classList.remove("is-open");
-  // Browse mods/resource packs/shader packs opens *over* this screen (not through
-  // `closeAllScreens`, so Back on it returns here) rather than being closed by it -- closing this
-  // screen has to take that overlay down too, or it'd linger open with a `currentInstanceId` for
-  // an instance the user has since navigated away from.
   el.browseContentScreenEl.classList.remove("is-open");
   state.viewingInstanceId = null;
 }
@@ -408,8 +366,6 @@ function renderInstanceDetail() {
   renderGameLog();
   void refreshInstanceContent(instance.id);
 }
-
-// ---------- rename instance ----------
 
 let renameInstanceTargetId: string | null = null;
 
@@ -448,8 +404,6 @@ async function confirmRenameInstance() {
   }
 }
 
-// ---------- change version ----------
-
 function pickChangeVersion(versionId: string) {
   void applyInstanceVersion(versionId);
 }
@@ -477,8 +431,6 @@ async function applyInstanceVersion(versionId: string) {
     showErrorModal(describeError(err));
   }
 }
-
-// ---------- icon ----------
 
 async function pickInstanceIcon() {
   if (!state.viewingInstanceId) return;
@@ -508,8 +460,6 @@ async function clearInstanceIcon() {
     showErrorModal(describeError(err));
   }
 }
-
-// ---------- export / delete ----------
 
 async function exportInstance(targetId?: string) {
   const instanceId = targetId ?? state.viewingInstanceId;
